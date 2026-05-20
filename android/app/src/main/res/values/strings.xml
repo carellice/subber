@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Subber</string>
+    <string name="title_activity_main">Subber</string>
+    <string name="package_name">com.subber.app</string>
+    <string name="custom_url_scheme">com.subber.app</string>
+</resources>

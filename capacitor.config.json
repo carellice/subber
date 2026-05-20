@@ -1,0 +1,21 @@
+{
+  "appId": "com.subber.app",
+  "appName": "Subber",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 800,
+      "backgroundColor": "#07131f",
+      "androidSplashResourceName": "splash",
+      "showSpinner": false
+    },
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_subber",
+      "iconColor": "#7BE8FF"
+    }
+  },
+  "android": {
+    "backgroundColor": "#07131f"
+  }
+}

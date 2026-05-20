@@ -1,0 +1,19 @@
+{
+  "name": "Subber",
+  "short_name": "Subber",
+  "description": "Una PWA locale per monitorare abbonamenti, categorie e rinnovi.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#07131f",
+  "theme_color": "#07131f",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
