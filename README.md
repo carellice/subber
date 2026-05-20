@@ -11,12 +11,12 @@
 <p align="center">
   <a href="#italiano">Italiano</a> ·
   <a href="#english">English</a> ·
-  <a href="https://github.com/flaviocecca/subber-codex/releases">GitHub Releases</a>
+  <a href="https://github.com/carellice/subber/releases">GitHub Releases</a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/flaviocecca/subber-codex/releases/latest">
-    <img alt="Latest release" src="https://img.shields.io/github/v/release/flaviocecca/subber-codex?label=release">
+  <a href="https://github.com/carellice/subber/releases/latest">
+    <img alt="Latest release" src="https://img.shields.io/github/v/release/carellice/subber?label=release">
   </a>
   <img alt="React" src="https://img.shields.io/badge/React-18-61dafb">
   <img alt="Vite" src="https://img.shields.io/badge/Vite-6-646cff">
@@ -46,11 +46,11 @@ Subber e' un'app per tenere sotto controllo gli abbonamenti: prezzo, categoria, 
 
 Le versioni pubblicate sono disponibili nella pagina:
 
-[Scarica da GitHub Releases](https://github.com/flaviocecca/subber-codex/releases)
+[Scarica da GitHub Releases](https://github.com/carellice/subber/releases)
 
 Per l'ultima versione:
 
-[Latest release](https://github.com/flaviocecca/subber-codex/releases/latest)
+[Latest release](https://github.com/carellice/subber/releases/latest)
 
 ### Requisiti
 
@@ -114,11 +114,11 @@ Subber is an app for tracking subscriptions: price, category, renewal date, remi
 
 Published builds are available on:
 
-[Download from GitHub Releases](https://github.com/flaviocecca/subber-codex/releases)
+[Download from GitHub Releases](https://github.com/carellice/subber/releases)
 
 For the newest build:
 
-[Latest release](https://github.com/flaviocecca/subber-codex/releases/latest)
+[Latest release](https://github.com/carellice/subber/releases/latest)
 
 ### Requirements
 
