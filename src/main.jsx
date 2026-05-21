@@ -34,12 +34,14 @@ import {
   FolderKanban,
   Home,
   LayoutDashboard,
+  Monitor,
   Moon,
   Palette,
   Plus,
   Search,
   Settings,
   Sparkles,
+  Sun,
   Tag,
   Trash2,
   Upload,
@@ -111,6 +113,10 @@ function loadData() {
     localStorage.removeItem(STORAGE_KEY);
   }
 
+  return initialData();
+}
+
+function initialData() {
   return {
     subscriptions: defaultSubscriptions,
     categories: defaultCategories,
@@ -249,6 +255,7 @@ function App() {
   const [subscriptionSortDirection, setSubscriptionSortDirection] = useState("asc");
   const [theme, setTheme] = useState("system");
   const [activeTab, setActiveTab] = useState("home");
+  const [desktopMenuOpen, setDesktopMenuOpen] = useState(false);
   const modalHistoryActive = useRef(false);
   const pendingModalClose = useRef(null);
   const backupInputRef = useRef(null);
@@ -549,6 +556,43 @@ function App() {
     reader.readAsText(file);
   }
 
+  async function clearAppData() {
+    const firstConfirmation = window.confirm(
+      "Vuoi cancellare tutti i dati di Subber da questo dispositivo? L'operazione non puo' essere annullata."
+    );
+    if (!firstConfirmation) return;
+
+    const secondConfirmation = window.confirm(
+      "Confermi la cancellazione definitiva di abbonamenti, categorie, impostazioni e promemoria?"
+    );
+    if (!secondConfirmation) return;
+
+    if (isNativeApp()) {
+      try {
+        const pending = await LocalNotifications.getPending();
+        const subberNotifications = pending.notifications
+          .filter((notification) => String(notification.extra?.source || "").startsWith("subber-"))
+          .map((notification) => ({ id: notification.id }));
+
+        if (subberNotifications.length) {
+          await LocalNotifications.cancel({ notifications: subberNotifications });
+        }
+      } catch {
+        // Se la cancellazione delle notifiche fallisce, i dati locali vengono comunque rimossi.
+      }
+    }
+
+    localStorage.removeItem(STORAGE_KEY);
+    setActiveCategory("all");
+    setQuery("");
+    setEditingSub(null);
+    setSelectedSub(null);
+    setEditingCategory(null);
+    setData(initialData());
+    selectTab("home");
+    window.alert("Tutti i dati di Subber sono stati cancellati.");
+  }
+
   function saveSubscription(subscription) {
     setData((current) => {
       const exists = current.subscriptions.some((item) => item.id === subscription.id);
@@ -671,14 +715,6 @@ function App() {
     return () => listener?.remove();
   }, [data.onboardingCompleted, editingSub, selectedSub, editingCategory, activeTab]);
 
-  function cycleTheme() {
-    setTheme((current) => {
-      if (current === "system") return "dark";
-      if (current === "dark") return "light";
-      return "system";
-    });
-  }
-
   function removeCategory(id) {
     const fallback = categories.find((cat) => cat.id !== id)?.id || "streaming";
     setData((current) => ({
@@ -696,10 +732,31 @@ function App() {
     settings: "Impostazioni"
   }[activeTab];
   const activeNavIndex = ["home", "subscriptions", "categories", "settings"].indexOf(activeTab);
+  const navItems = [
+    { id: "home", icon: <Home />, label: "Home" },
+    { id: "subscriptions", icon: <LayoutDashboard />, label: "Lista" },
+    { id: "categories", icon: <FolderKanban />, label: "Categorie" },
+    { id: "settings", icon: <Settings />, label: "Impostazioni" }
+  ];
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell ${desktopMenuOpen ? "desktop-menu-open" : ""}`}>
       <header className="app-bar">
+        <div className="desktop-nav">
+          <button
+            className={`desktop-menu-button ${desktopMenuOpen ? "open" : ""}`}
+            type="button"
+            aria-label="Apri menu"
+            aria-expanded={desktopMenuOpen}
+            onClick={() => setDesktopMenuOpen((open) => !open)}
+          >
+            <span />
+            <span />
+            <span />
+          </button>
+
+        </div>
+
         <div className="app-brand">
           <img src="/logo.png" alt="Subber" />
           <div>
@@ -708,6 +765,26 @@ function App() {
           </div>
         </div>
       </header>
+
+      <aside className={`desktop-menu ${desktopMenuOpen ? "open" : ""}`} aria-label="Navigazione principale">
+        <div>
+          <span>Menu</span>
+          <strong>{pageTitle}</strong>
+        </div>
+        <nav>
+          {navItems.map((item) => (
+            <button
+              key={item.id}
+              className={activeTab === item.id ? "active" : ""}
+              type="button"
+              onClick={() => selectTab(item.id)}
+            >
+              <span>{React.cloneElement(item.icon, { size: 19 })}</span>
+              {item.label}
+            </button>
+          ))}
+        </nav>
+      </aside>
 
       <section className={`page ${activeTab}`} key={activeTab}>
         {activeTab === "home" && (
@@ -718,6 +795,7 @@ function App() {
             categoryTotals={categoryTotals}
             currencyCode={data.currency}
             onCreate={() => setEditingSub(emptySubscription(categories[0]?.id))}
+            onCreateCategory={() => setEditingCategory(emptyCategory())}
             onOpenSubscriptions={() => selectTab("subscriptions")}
             onOpenCategories={() => selectTab("categories")}
             onOpenCategorySubscriptions={(categoryId) => {
@@ -771,7 +849,8 @@ function App() {
             onTestNotification={triggerTestNotification}
             onExportBackup={exportBackup}
             onImportBackup={() => backupInputRef.current?.click()}
-            onToggleTheme={cycleTheme}
+            onSelectTheme={setTheme}
+            onClearAppData={clearAppData}
           />
         )}
       </section>
@@ -813,10 +892,9 @@ function App() {
 
       <nav className="bottom-nav" aria-label="Navigazione principale" style={{ "--active-index": activeNavIndex }}>
         <span className="nav-indicator" aria-hidden="true" />
-        <NavItem id="home" active={activeTab} onClick={selectTab} icon={<Home />} label="Home" />
-        <NavItem id="subscriptions" active={activeTab} onClick={selectTab} icon={<LayoutDashboard />} label="Lista" />
-        <NavItem id="categories" active={activeTab} onClick={selectTab} icon={<FolderKanban />} label="Categorie" />
-        <NavItem id="settings" active={activeTab} onClick={selectTab} icon={<Settings />} label="Impostazioni" />
+        {navItems.map((item) => (
+          <NavItem key={item.id} id={item.id} active={activeTab} onClick={selectTab} icon={item.icon} label={item.label} />
+        ))}
       </nav>
 
       {editingSub && (
@@ -876,6 +954,7 @@ function HomePage({
   categoryTotals,
   currencyCode,
   onCreate,
+  onCreateCategory,
   onOpenSubscriptions,
   onOpenCategories,
   onOpenCategorySubscriptions,
@@ -894,6 +973,67 @@ function HomePage({
     }))
     .filter((category) => category.count > 0)
     .sort((a, b) => b.count - a.count || b.total - a.total)[0];
+
+  if (!subscriptions.length) {
+    return (
+      <div className="screen-grid home-grid">
+        <section className="home-empty-start">
+          <div className="home-empty-copy">
+            <span className="eyebrow"><Sparkles size={15} /> Primo avvio</span>
+            <h1>Costruisci il tuo primo promemoria.</h1>
+            <p>
+              Aggiungi un abbonamento per vedere subito rinnovi, spesa mensile e categorie nella panoramica.
+            </p>
+            <div className="home-empty-actions">
+              <button className="primary pill" onClick={onCreate} type="button">
+                <Plus size={18} />
+                Primo abbonamento
+              </button>
+              <button className="ghost pill" onClick={onCreateCategory} type="button">
+                <Tag size={18} />
+                Nuova categoria
+              </button>
+            </div>
+          </div>
+
+          <div className="home-empty-panel" aria-label="Percorso iniziale">
+            <div>
+              <span>1</span>
+              <strong>Crea una categoria</strong>
+              <small>Usa quelle gia' pronte o personalizzane una.</small>
+            </div>
+            <div>
+              <span>2</span>
+              <strong>Aggiungi un rinnovo</strong>
+              <small>Nome, prezzo, data e cadenza bastano per partire.</small>
+            </div>
+            <div>
+              <span>3</span>
+              <strong>Attiva un promemoria</strong>
+              <small>Subber ti avvisa prima della prossima scadenza.</small>
+            </div>
+          </div>
+        </section>
+
+        <SectionHeader title="Categorie disponibili" action="Gestisci" onClick={onOpenCategories} />
+        <div className="category-chips">
+          {categoryTotals.map((category) => (
+            <button
+              className="category-chip-card"
+              key={category.id}
+              onClick={() => onOpenCategorySubscriptions(category.id)}
+              type="button"
+            >
+              <i style={{ background: category.color }} />
+              <span>{category.name}</span>
+              <strong>{currency(category.total, currencyCode)}</strong>
+              <ChevronRight size={18} />
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="screen-grid home-grid">
@@ -1109,8 +1249,15 @@ function SettingsPage({
   onTestNotification,
   onExportBackup,
   onImportBackup,
-  onToggleTheme
+  onSelectTheme,
+  onClearAppData
 }) {
+  const themeOptions = [
+    { value: "system", label: "Auto", Icon: Monitor },
+    { value: "dark", label: "Scuro", Icon: Moon },
+    { value: "light", label: "Chiaro", Icon: Sun }
+  ];
+
   return (
     <div className="screen-grid">
       <section className="page-hero settings-hero">
@@ -1136,14 +1283,28 @@ function SettingsPage({
         <ChevronRight size={19} />
       </button>
 
-      <button className="settings-row" onClick={onToggleTheme}>
+      <div className="settings-row control-row theme-row">
         <span className="icon-surface"><Moon size={20} /></span>
         <div>
           <strong>Tema app</strong>
           <small>{themeLabel(theme)}</small>
         </div>
-        <ChevronRight size={19} />
-      </button>
+        <div className="theme-segment" role="radiogroup" aria-label="Tema app">
+          {themeOptions.map(({ value, label, Icon }) => (
+            <button
+              key={value}
+              type="button"
+              className={theme === value ? "active" : ""}
+              role="radio"
+              aria-checked={theme === value}
+              onClick={() => onSelectTheme(value)}
+            >
+              <Icon size={16} />
+              <span>{label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="settings-row passive">
         <span className="icon-surface"><WalletCards size={20} /></span>
@@ -1168,6 +1329,15 @@ function SettingsPage({
         <div>
           <strong>Ripristina backup</strong>
           <small>Importa un file JSON salvato da Subber</small>
+        </div>
+        <ChevronRight size={19} />
+      </button>
+
+      <button className="settings-row danger" onClick={onClearAppData}>
+        <span className="icon-surface"><Trash2 size={20} /></span>
+        <div>
+          <strong>Cancella tutti i dati</strong>
+          <small>Doppia conferma prima della rimozione definitiva</small>
         </div>
         <ChevronRight size={19} />
       </button>
