@@ -1365,7 +1365,7 @@ function SettingsPage({
           <strong>Prezzo mensile in lista</strong>
           <small>{showMonthlyInList ? "Mostra il costo mensile stimato" : "Mostra il prezzo originale"}</small>
         </div>
-        {showMonthlyInList ? <Check size={19} /> : <ChevronRight size={19} />}
+        <span className={`switch-control ${showMonthlyInList ? "active" : ""}`} aria-hidden="true" />
       </button>
 
       <button className="settings-row" onClick={onExportBackup}>
