@@ -1328,12 +1328,46 @@ label,
   white-space: nowrap;
 }
 
+.sub-descriptors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sub-descriptors span {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sub-descriptors span + span::before {
+  content: "· ";
+}
+
 .sub-meta {
   position: relative;
   z-index: 1;
   display: grid;
   justify-items: end;
   gap: 3px;
+}
+
+.cadence-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--line));
+  border-radius: 999px;
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  font-size: 0.76rem;
+  font-weight: 950;
+  line-height: 1;
 }
 
 .sub-meta strong {
@@ -1961,6 +1995,17 @@ textarea {
   outline: 0;
   color: var(--text);
   background: color-mix(in srgb, var(--surface-high) 72%, transparent);
+}
+
+input[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
 }
 
 input,

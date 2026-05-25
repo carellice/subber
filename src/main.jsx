@@ -146,12 +146,13 @@ function daysUntil(value) {
 function monthlyCost(subscription) {
   const price = Number(subscription.price || 0);
   if (subscription.cadence === "yearly") return price / 12;
+  if (subscription.cadence === "biannual") return price / 6;
   if (subscription.cadence === "weekly") return price * 4.345;
   return price;
 }
 
 function cadenceLabel(cadence) {
-  return { monthly: "Mensile", yearly: "Annuale", weekly: "Settimanale" }[cadence] || "Mensile";
+  return { monthly: "Mensile", yearly: "Annuale", biannual: "Biannuale", weekly: "Settimanale" }[cadence] || "Mensile";
 }
 
 function sortSubscriptions(items, sortMode, sortDirection, categories = []) {
@@ -292,6 +293,17 @@ function App() {
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js");
     }
+  }, []);
+
+  useEffect(() => {
+    function preventNumberWheel(event) {
+      if (event.target instanceof HTMLInputElement && event.target.type === "number") {
+        event.preventDefault();
+      }
+    }
+
+    document.addEventListener("wheel", preventNumberWheel, { passive: false });
+    return () => document.removeEventListener("wheel", preventNumberWheel);
   }, []);
 
   useEffect(() => {
@@ -1536,6 +1548,7 @@ function SubscriptionAvatar({ subscription, category, size = "" }) {
 function SubscriptionCard({ subscription, category, currencyCode, onOpen, onEdit, onDelete }) {
   const days = daysUntil(subscription.renewalDate);
   const urgency = days <= 1 ? "danger" : days <= subscription.reminderDays ? "warning" : "calm";
+  const note = subscription.note?.trim();
   const [menuState, setMenuState] = useState("closed");
   const longPressTimer = useRef(null);
   const longPressTriggered = useRef(false);
@@ -1614,11 +1627,14 @@ function SubscriptionCard({ subscription, category, currencyCode, onOpen, onEdit
         <SubscriptionAvatar subscription={subscription} category={category} />
         <div>
           <h3>{subscription.name}</h3>
-          <span>{category?.name || "Senza categoria"} · {subscription.note || cadenceLabel(subscription.cadence)}</span>
+          <div className="sub-descriptors">
+            <span>{category?.name || "Senza categoria"}</span>
+            {note && <span>{note}</span>}
+          </div>
         </div>
       </div>
       <div className="sub-meta">
-        <span>{cadenceLabel(subscription.cadence)}</span>
+        <span className="cadence-badge">{cadenceLabel(subscription.cadence)}</span>
         <strong>{currency(subscription.price, currencyCode)}</strong>
       </div>
       <div className="renewal-pill">
@@ -1733,6 +1749,10 @@ function SubscriptionModal({ subscription, categories, currencyCode, closing, on
     setDraft((current) => ({ ...current, [field]: value }));
   }
 
+  function updatePrice(value) {
+    update("price", value.replace(",", ".").replace(/[^\d.]/g, "").replace(/(\..*)\./g, "$1"));
+  }
+
   function handleImageUpload(event) {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -1804,13 +1824,20 @@ function SubscriptionModal({ subscription, categories, currencyCode, closing, on
         <div className="form-grid">
           <label>
             Prezzo
-            <input required min="0" step="0.01" type="number" value={draft.price} onChange={(event) => update("price", event.target.value)} />
+            <input
+              required
+              inputMode="decimal"
+              pattern="\\d*(\\.\\d{0,2})?"
+              value={draft.price}
+              onChange={(event) => updatePrice(event.target.value)}
+            />
           </label>
           <label>
             Frequenza
             <select value={draft.cadence} onChange={(event) => update("cadence", event.target.value)}>
               <option value="monthly">Mensile</option>
               <option value="yearly">Annuale</option>
+              <option value="biannual">Biannuale</option>
               <option value="weekly">Settimanale</option>
             </select>
           </label>
