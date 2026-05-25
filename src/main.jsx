@@ -1842,7 +1842,6 @@ function SubscriptionModal({ subscription, categories, currencyCode, closing, on
             <input
               required
               inputMode="decimal"
-              pattern="\\d*(\\.\\d{0,2})?"
               value={draft.price}
               onChange={(event) => updatePrice(event.target.value)}
             />
