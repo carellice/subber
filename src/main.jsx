@@ -118,7 +118,11 @@ function loadData() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
     if (saved?.subscriptions && saved?.categories) {
-      return { ...saved, onboardingCompleted: saved.onboardingCompleted ?? true };
+      return {
+        ...saved,
+        onboardingCompleted: saved.onboardingCompleted ?? true,
+        showMonthlyInList: saved.showMonthlyInList ?? false
+      };
     }
   } catch {
     localStorage.removeItem(STORAGE_KEY);
@@ -134,7 +138,8 @@ function initialData() {
     currency: "EUR",
     notificationsEnabled: false,
     dismissedNotifications: {},
-    onboardingCompleted: false
+    onboardingCompleted: false,
+    showMonthlyInList: false
   };
 }
 
@@ -571,7 +576,8 @@ function App() {
           currency: imported.currency || "EUR",
           notificationsEnabled: Boolean(imported.notificationsEnabled),
           dismissedNotifications: imported.dismissedNotifications || {},
-          onboardingCompleted: true
+          onboardingCompleted: true,
+          showMonthlyInList: Boolean(imported.showMonthlyInList)
         });
         window.alert("Backup ripristinato correttamente.");
       } catch {
@@ -849,6 +855,7 @@ function App() {
             categories={categories}
             stats={stats}
             currencyCode={data.currency}
+            showMonthlyInList={data.showMonthlyInList}
             onCreate={() => setEditingSub(emptySubscription(categories[0]?.id))}
             onOpenDetail={setSelectedSub}
             onEditSubscription={setEditingSub}
@@ -861,6 +868,7 @@ function App() {
             activeCategory={activeCategory}
             setActiveCategory={setActiveCategory}
             categoryTotals={categoryTotals}
+            currencyCode={data.currency}
             onCreate={() => setEditingCategory(emptyCategory())}
             onEdit={setEditingCategory}
             onDelete={removeCategory}
@@ -877,6 +885,8 @@ function App() {
             onExportBackup={exportBackup}
             onImportBackup={() => backupInputRef.current?.click()}
             onSelectTheme={setTheme}
+            showMonthlyInList={data.showMonthlyInList}
+            onToggleMonthlyInList={() => setData((current) => ({ ...current, showMonthlyInList: !current.showMonthlyInList }))}
             onClearAppData={clearAppData}
           />
         )}
@@ -1158,6 +1168,7 @@ function SubscriptionsPage({
   categories,
   stats,
   currencyCode,
+  showMonthlyInList,
   onCreate,
   onOpenDetail,
   onEditSubscription,
@@ -1220,6 +1231,7 @@ function SubscriptionsPage({
             subscription={subscription}
             category={categories.find((cat) => cat.id === subscription.categoryId)}
             currencyCode={currencyCode}
+            showMonthlyInList={showMonthlyInList}
             onOpen={() => onOpenDetail(subscription)}
             onEdit={() => onEditSubscription(subscription)}
             onDelete={() => onDeleteSubscription(subscription.id)}
@@ -1241,7 +1253,9 @@ function SubscriptionsPage({
   );
 }
 
-function CategoriesPage({ activeCategory, setActiveCategory, categoryTotals, onEdit, onDelete, onOpenSubscriptions }) {
+function CategoriesPage({ activeCategory, setActiveCategory, categoryTotals, currencyCode, onEdit, onDelete, onOpenSubscriptions }) {
+  const total = categoryTotals.reduce((sum, category) => sum + category.total, 0);
+
   return (
     <div className="screen-grid">
       <section className="page-hero small-hero">
@@ -1249,12 +1263,13 @@ function CategoriesPage({ activeCategory, setActiveCategory, categoryTotals, onE
         <p>Ogni categoria mostra quanti abbonamenti contiene e il totale mensile collegato.</p>
       </section>
 
-      <SectionHeader title="Tutte le categorie" />
+      <SectionHeader title="Tutte le categorie" meta={`${currency(total, currencyCode)} / mese`} />
       <div className="category-list">
         {categoryTotals.map((category) => (
           <CategoryButton
             key={category.id}
             active={activeCategory === category.id}
+            currencyCode={currencyCode}
             {...category}
             onClick={() => {
               setActiveCategory(category.id);
@@ -1277,6 +1292,8 @@ function SettingsPage({
   onExportBackup,
   onImportBackup,
   onSelectTheme,
+  showMonthlyInList,
+  onToggleMonthlyInList,
   onClearAppData
 }) {
   const themeOptions = [
@@ -1342,6 +1359,15 @@ function SettingsPage({
         <Check size={19} />
       </div>
 
+      <button className="settings-row" onClick={onToggleMonthlyInList}>
+        <span className="icon-surface"><CircleDollarSign size={20} /></span>
+        <div>
+          <strong>Prezzo mensile in lista</strong>
+          <small>{showMonthlyInList ? "Mostra il costo mensile stimato" : "Mostra il prezzo originale"}</small>
+        </div>
+        {showMonthlyInList ? <Check size={19} /> : <ChevronRight size={19} />}
+      </button>
+
       <button className="settings-row" onClick={onExportBackup}>
         <span className="icon-surface"><Download size={20} /></span>
         <div>
@@ -1383,10 +1409,13 @@ function NavItem({ id, active, onClick, icon, label }) {
   );
 }
 
-function SectionHeader({ title, action, onClick, icon }) {
+function SectionHeader({ title, action, onClick, icon, meta }) {
   return (
     <div className="section-header">
-      <strong>{title}</strong>
+      <div className="section-heading">
+        <strong>{title}</strong>
+        {meta && <span>{meta}</span>}
+      </div>
       {action && (
         <button onClick={onClick} type="button">
           {icon}
@@ -1407,7 +1436,7 @@ function Metric({ icon, label, value }) {
   );
 }
 
-function CategoryButton({ active, name, total, count, color, onClick, onEdit, onDelete }) {
+function CategoryButton({ active, name, total, count, color, currencyCode, onClick, onEdit, onDelete }) {
   const [menuState, setMenuState] = useState("closed");
   const longPressTimer = useRef(null);
   const longPressTriggered = useRef(false);
@@ -1475,7 +1504,7 @@ function CategoryButton({ active, name, total, count, color, onClick, onEdit, on
           <b>{name}</b>
           <small>{count} {count === 1 ? "abbonamento" : "abbonamenti"}</small>
         </span>
-        <strong>{currency(total)}</strong>
+        <strong>{currency(total, currencyCode)}</strong>
         <ChevronRight size={18} />
       </button>
       {menuOpen && createPortal(
@@ -1499,7 +1528,7 @@ function CategoryButton({ active, name, total, count, color, onClick, onEdit, on
               </div>
               <div>
                 <strong>{name}</strong>
-                <span>{count} {count === 1 ? "abbonamento" : "abbonamenti"} · {currency(total)}</span>
+                <span>{count} {count === 1 ? "abbonamento" : "abbonamenti"} · {currency(total, currencyCode)}</span>
               </div>
             </div>
             <button onClick={() => runMenuAction(onClick)}>
@@ -1560,10 +1589,11 @@ function SubscriptionAvatar({ subscription, category, size = "" }) {
   );
 }
 
-function SubscriptionCard({ subscription, category, currencyCode, onOpen, onEdit, onDelete }) {
+function SubscriptionCard({ subscription, category, currencyCode, showMonthlyInList, onOpen, onEdit, onDelete }) {
   const days = daysUntil(subscription.renewalDate);
   const urgency = days <= 1 ? "danger" : days <= subscription.reminderDays ? "warning" : "calm";
   const note = subscription.note?.trim();
+  const displayPrice = showMonthlyInList ? monthlyCost(subscription) : subscription.price;
   const [menuState, setMenuState] = useState("closed");
   const longPressTimer = useRef(null);
   const longPressTriggered = useRef(false);
@@ -1650,7 +1680,8 @@ function SubscriptionCard({ subscription, category, currencyCode, onOpen, onEdit
       </div>
       <div className="sub-meta">
         <span className="cadence-badge">{cadenceLabel(subscription.cadence)}</span>
-        <strong>{currency(subscription.price, currencyCode)}</strong>
+        <strong>{currency(displayPrice, currencyCode)}</strong>
+        {showMonthlyInList && subscription.cadence !== "monthly" && <small>/ mese</small>}
       </div>
       <div className="renewal-pill">
         <CalendarClock size={16} />
