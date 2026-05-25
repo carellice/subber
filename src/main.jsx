@@ -146,7 +146,7 @@ function daysUntil(value) {
 function monthlyCost(subscription) {
   const price = Number(subscription.price || 0);
   if (subscription.cadence === "yearly") return price / 12;
-  if (subscription.cadence === "biannual") return price / 6;
+  if (subscription.cadence === "biannual") return price / 24;
   if (subscription.cadence === "weekly") return price * 4.345;
   return price;
 }
