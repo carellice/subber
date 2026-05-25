@@ -15,8 +15,11 @@ import {
   siIcloud,
   siNetflix,
   siNotion,
+  siNow,
   siPlaystation,
+  siSky,
   siSpotify,
+  siVodafone,
   siYoutube
 } from "simple-icons/icons";
 import {
@@ -83,9 +86,17 @@ const BRAND_PRESETS = [
   { id: "google", name: "Google One", label: "G", bg: "#34a853", fg: "#ffffff", icon: siGoogle, aliases: ["google", "google one"] },
   { id: "microsoft", name: "Microsoft 365", label: "M", bg: "#f25022", fg: "#ffffff", Icon: FaMicrosoft, aliases: ["microsoft", "office", "365"] },
   { id: "dazn", name: "DAZN", label: "D", bg: "#f8ff13", fg: "#050505", icon: siDazn, aliases: ["dazn"] },
+  { id: "sky", name: "Sky", label: "Sky", bg: "#ffffff", fg: "#0a4fd7", icon: siSky, aliases: ["sky"] },
+  { id: "now", name: "NOW", label: "NOW", bg: "#00e0b8", fg: "#001b18", icon: siNow, aliases: ["now", "now tv"] },
   { id: "playstation", name: "PlayStation", label: "PS", bg: "#006fcd", fg: "#ffffff", icon: siPlaystation, aliases: ["playstation", "ps plus"] },
   { id: "xbox", name: "Xbox", label: "X", bg: "#107c10", fg: "#ffffff", Icon: FaXbox, aliases: ["xbox", "game pass"] },
-  { id: "chatgpt", name: "ChatGPT", label: "AI", bg: "#10a37f", fg: "#ffffff", Icon: SiOpenai, aliases: ["chatgpt", "openai"] }
+  { id: "chatgpt", name: "ChatGPT", label: "AI", bg: "#10a37f", fg: "#ffffff", Icon: SiOpenai, aliases: ["chatgpt", "openai"] },
+  { id: "aruba", name: "Aruba", label: "Aruba", bg: "#d71920", fg: "#ffffff", wordmark: true, aliases: ["aruba"] },
+  { id: "iliad", name: "Iliad", label: "iliad", bg: "#c00a1e", fg: "#ffffff", wordmark: true, aliases: ["iliad"] },
+  { id: "tim", name: "TIM", label: "TIM", bg: "#004990", fg: "#ffffff", wordmark: true, aliases: ["tim", "telecom italia"] },
+  { id: "vodafone", name: "Vodafone", label: "V", bg: "#e60000", fg: "#ffffff", icon: siVodafone, aliases: ["vodafone"] },
+  { id: "windtre", name: "WINDTRE", label: "W3", bg: "#ff7a00", fg: "#ffffff", wordmark: true, aliases: ["windtre", "wind tre", "wind3", "wind"] },
+  { id: "serenis", name: "Serenis", label: "Serenis", bg: "#173b3f", fg: "#b7f36d", wordmark: true, aliases: ["serenis"] }
 ];
 
 const defaultCategories = [
@@ -189,6 +200,10 @@ function presetForSubscription(subscription) {
 }
 
 function BrandMark({ preset }) {
+  if (preset.wordmark) {
+    return <span className="brand-wordmark">{preset.label}</span>;
+  }
+
   if (preset.imageSrc) {
     return <img src={preset.imageSrc} alt="" />;
   }

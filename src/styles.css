@@ -1300,6 +1300,24 @@ label,
   filter: var(--brand-img-filter, none);
 }
 
+.brand-wordmark {
+  max-width: 92%;
+  overflow: hidden;
+  color: var(--brand-fg);
+  font-size: clamp(0.52rem, 1.4vw, 0.72rem);
+  font-weight: 950;
+  letter-spacing: 0;
+  line-height: 1;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logo-dot .brand-wordmark,
+.preset-grid button > span .brand-wordmark {
+  color: var(--brand-fg);
+}
+
 .logo-dot.image {
   overflow: hidden;
   background: color-mix(in srgb, var(--surface-high) 76%, transparent);
