@@ -100,11 +100,15 @@ const BRAND_PRESETS = [
 ];
 
 const defaultCategories = [
-  { id: "streaming", name: "Streaming", color: "#17d5f4" },
-  { id: "work", name: "Lavoro", color: "#8b5cf6" },
-  { id: "wellness", name: "Benessere", color: "#34d399" },
-  { id: "cloud", name: "Cloud", color: "#f59e0b" }
+  { id: "streaming", name: "Streaming", color: "#ffd84d" },
+  { id: "work", name: "Lavoro", color: "#ffb800" },
+  { id: "wellness", name: "Benessere", color: "#fff0ad" },
+  { id: "cloud", name: "Cloud", color: "#8f7a42" }
 ];
+const DUEFFE_LOGO_DARK = "/dueffe/logo dueffe dark.png";
+const DUEFFE_LOGO_LIGHT = "/dueffe/logo dueffe light.png";
+const DUEFFE_LOGO_DARK_CLEAR = "/dueffe/logo dueffe dark no sfondo.png";
+const DUEFFE_LOGO_LIGHT_CLEAR = "/dueffe/logo dueffe light no sfondo.png";
 
 const defaultSubscriptions = [];
 
@@ -350,7 +354,7 @@ function App() {
         if (navigator.serviceWorker?.controller) {
           navigator.serviceWorker.controller.postMessage({ type: "SUBBER_NOTIFY", payload });
         } else {
-          new Notification(payload.title, { body: payload.body, icon: "/logo.png" });
+          new Notification(payload.title, { body: payload.body, icon: DUEFFE_LOGO_DARK });
         }
       });
 
@@ -413,7 +417,7 @@ function App() {
             schedule: { at },
             channelId: "renewals",
             smallIcon: "ic_stat_subber",
-            iconColor: "#7BE8FF",
+            iconColor: "#FFD84D",
             extra: { source: "subber-renewal", subscriptionId: sub.id }
           };
         })
@@ -497,7 +501,7 @@ function App() {
             schedule: { at: new Date(Date.now() + 1000) },
             channelId: "renewals",
             smallIcon: "ic_stat_subber",
-            iconColor: "#7BE8FF",
+            iconColor: "#FFD84D",
             extra: { source: "subber-test" }
           }
         ]
@@ -530,12 +534,12 @@ function App() {
       const registration = await navigator.serviceWorker.ready;
       await registration.showNotification(payload.title, {
         body: payload.body,
-        icon: "/logo.png",
-        badge: "/logo.png",
+        icon: DUEFFE_LOGO_DARK,
+        badge: DUEFFE_LOGO_DARK,
         tag: `subber-test-${Date.now()}`
       });
     } else {
-      new Notification(payload.title, { body: payload.body, icon: "/logo.png" });
+      new Notification(payload.title, { body: payload.body, icon: DUEFFE_LOGO_DARK });
     }
   }
 
@@ -791,10 +795,12 @@ function App() {
         </div>
 
         <div className="app-brand">
-          <img src="/logo.png" alt="Subber" />
+          <span className="app-brand-logo" aria-hidden="true">
+            <img className="app-brand-logo-dark" src={DUEFFE_LOGO_DARK_CLEAR} alt="" />
+            <img className="app-brand-logo-light" src={DUEFFE_LOGO_LIGHT_CLEAR} alt="" />
+          </span>
           <div>
-            <span>Subber</span>
-            <strong>{pageTitle}</strong>
+            <strong>Subber</strong>
           </div>
         </div>
       </header>
@@ -1556,7 +1562,7 @@ function CategoryButton({ active, name, total, count, color, currencyCode, onCli
 
 function SubscriptionAvatar({ subscription, category, size = "" }) {
   const preset = presetForSubscription(subscription);
-  const accent = category?.color || "#17d5f4";
+  const accent = category?.color || "#ffd84d";
 
   if (subscription.imageData) {
     return (
@@ -1653,7 +1659,7 @@ function SubscriptionCard({ subscription, category, currencyCode, showMonthlyInL
   return (
     <article
       className={`sub-card ${urgency} ${menuOpen ? "menu-open" : ""}`}
-      style={{ "--accent": category?.color || "#17d5f4" }}
+      style={{ "--accent": category?.color || "#ffd84d" }}
       role="button"
       tabIndex={0}
       onClick={handleClick}
@@ -1667,7 +1673,7 @@ function SubscriptionCard({ subscription, category, currencyCode, showMonthlyInL
         openMenu();
       }}
     >
-      <div className="sub-card-glow" style={{ "--accent": category?.color || "#17d5f4" }} />
+      <div className="sub-card-glow" style={{ "--accent": category?.color || "#ffd84d" }} />
       <div className="sub-main">
         <SubscriptionAvatar subscription={subscription} category={category} />
         <div>
@@ -1705,7 +1711,7 @@ function SubscriptionCard({ subscription, category, currencyCode, showMonthlyInL
             onPointerDown={(event) => event.stopPropagation()}
           >
             <div className="context-grabber" />
-            <div className="context-preview" style={{ "--accent": category?.color || "#17d5f4" }}>
+            <div className="context-preview" style={{ "--accent": category?.color || "#ffd84d" }}>
               <SubscriptionAvatar subscription={subscription} category={category} />
               <div>
                 <strong>{subscription.name}</strong>
@@ -1741,7 +1747,7 @@ function SubscriptionDetailModal({ subscription, category, currencyCode, closing
   return (
     <Modal title={subscription.name} closing={closing} onClose={onClose}>
       <div className="detail-sheet">
-        <div className="detail-hero" style={{ "--accent": category?.color || "#17d5f4" }}>
+        <div className="detail-hero" style={{ "--accent": category?.color || "#ffd84d" }}>
           <SubscriptionAvatar subscription={subscription} category={category} size="large" />
           <div>
             <span>{category?.name || "Senza categoria"}</span>
@@ -1980,7 +1986,7 @@ function Onboarding({ onStart, onClose }) {
     <div className="onboarding-layer" role="dialog" aria-modal="true">
       <section className="onboarding-card">
         <div className="onboarding-orbit" aria-hidden="true">
-          <img src="/logo.png" alt="" />
+          <img src={DUEFFE_LOGO_LIGHT} alt="" />
         </div>
         <div className="onboarding-copy">
           <span className="eyebrow"><Sparkles size={15} /> Benvenuto in Subber</span>
@@ -2045,7 +2051,7 @@ function emptySubscription(categoryId) {
 }
 
 function emptyCategory() {
-  return { id: "", name: "", color: "#17d5f4" };
+  return { id: "", name: "", color: "#ffd84d" };
 }
 
 createRoot(document.getElementById("root")).render(<App />);
