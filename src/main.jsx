@@ -281,6 +281,7 @@ function App() {
   const [theme, setTheme] = useState("system");
   const [activeTab, setActiveTab] = useState("home");
   const [desktopMenuOpen, setDesktopMenuOpen] = useState(false);
+  const [brandCompact, setBrandCompact] = useState(false);
   const modalHistoryActive = useRef(false);
   const pendingModalClose = useRef(null);
   const backupInputRef = useRef(null);
@@ -300,6 +301,11 @@ function App() {
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "instant" });
   }, [activeTab]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setBrandCompact(true), 1800);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     const media = window.matchMedia?.("(prefers-color-scheme: light)");
@@ -794,14 +800,14 @@ function App() {
 
         </div>
 
-        <div className="app-brand">
+        <div className={`app-brand${brandCompact ? " is-compact" : ""}`} role="img" aria-label="Subber">
+          <span className="brand-text brand-text-left" aria-hidden="true">due</span>
           <span className="app-brand-logo" aria-hidden="true">
             <img className="app-brand-logo-dark" src={DUEFFE_LOGO_DARK_CLEAR} alt="" />
             <img className="app-brand-logo-light" src={DUEFFE_LOGO_LIGHT_CLEAR} alt="" />
           </span>
-          <div>
-            <strong>Subber</strong>
-          </div>
+          <span className="brand-text brand-text-right" aria-hidden="true">e</span>
+          <span className="brand-text brand-text-app" aria-hidden="true">Subber</span>
         </div>
       </header>
 
