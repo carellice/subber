@@ -107,8 +107,8 @@ const defaultCategories = [
 ];
 const DUEFFE_LOGO_DARK = "/dueffe/logo dueffe dark.png";
 const DUEFFE_LOGO_LIGHT = "/dueffe/logo dueffe light.png";
-const DUEFFE_LOGO_DARK_CLEAR = "/dueffe/logo dueffe dark no sfondo.png";
-const DUEFFE_LOGO_LIGHT_CLEAR = "/dueffe/logo dueffe light no sfondo.png";
+const DUEFFE_LOGO_DARK_APPBAR = "/dueffe/logo dueffe dark appbar.png";
+const DUEFFE_LOGO_LIGHT_APPBAR = "/dueffe/logo dueffe light appbar.png";
 
 const defaultSubscriptions = [];
 
@@ -368,7 +368,9 @@ function App() {
   useEffect(() => {
     const media = window.matchMedia?.("(prefers-color-scheme: light)");
     const applyTheme = () => {
-      document.documentElement.dataset.theme = theme === "system" ? systemTheme() : theme;
+      const activeTheme = theme === "system" ? systemTheme() : theme;
+      document.documentElement.dataset.theme = activeTheme;
+      document.querySelector('meta[name="theme-color"]')?.setAttribute("content", activeTheme === "light" ? "#f5f5f2" : "#050505");
     };
 
     applyTheme();
@@ -884,8 +886,8 @@ function App() {
         <div className={`app-brand${brandCompact ? " is-compact" : ""}`} role="img" aria-label="Subber">
           <span className="brand-text brand-text-left" aria-hidden="true">due</span>
           <span className="app-brand-logo" aria-hidden="true">
-            <img className="app-brand-logo-dark" src={DUEFFE_LOGO_DARK_CLEAR} alt="" />
-            <img className="app-brand-logo-light" src={DUEFFE_LOGO_LIGHT_CLEAR} alt="" />
+            <img className="app-brand-logo-dark" src={DUEFFE_LOGO_DARK_APPBAR} alt="" />
+            <img className="app-brand-logo-light" src={DUEFFE_LOGO_LIGHT_APPBAR} alt="" />
           </span>
           <span className="brand-text brand-text-right" aria-hidden="true">e</span>
           <span className="brand-text brand-text-app" aria-hidden="true">Subber</span>

@@ -1,10 +1,24 @@
-const CACHE_NAME = "subber-v2";
+const CACHE_NAME = "subber-v3";
 const APP_SHELL = [
   "/",
   "/index.html",
   "/logo.png",
-  "/manifest.webmanifest"
+  "/manifest.webmanifest",
+  "/fonts/AutopromPro-BlackRoundedItalic.otf",
+  "/dueffe/logo%20dueffe%20dark%20appbar.png",
+  "/dueffe/logo%20dueffe%20light%20appbar.png",
+  "/dueffe/logo%20dueffe%20dark%20no%20sfondo.png",
+  "/dueffe/logo%20dueffe%20light%20no%20sfondo.png",
+  "/dueffe/logo%20dueffe%20dark.png",
+  "/dueffe/logo%20dueffe%20light.png"
 ];
+const CACHE_FIRST_PATHS = new Set(APP_SHELL.filter((url) => url !== "/" && url !== "/index.html"));
+
+function cacheResponse(request, response) {
+  const copy = response.clone();
+  caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+  return response;
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
@@ -23,13 +37,22 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
 
+  const url = new URL(event.request.url);
+  if (url.origin === self.location.origin && CACHE_FIRST_PATHS.has(url.pathname)) {
+    event.respondWith(
+      caches.match(event.request).then((cached) => {
+        const refreshed = fetch(event.request)
+          .then((response) => cacheResponse(event.request, response))
+          .catch(() => cached);
+        return cached || refreshed;
+      })
+    );
+    return;
+  }
+
   event.respondWith(
     fetch(event.request)
-      .then((response) => {
-        const copy = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-        return response;
-      })
+      .then((response) => cacheResponse(event.request, response))
       .catch(() => caches.match(event.request).then((cached) => cached || caches.match("/index.html")))
   );
 });
