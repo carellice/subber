@@ -163,6 +163,64 @@ function daysUntil(value) {
   return Math.ceil((target - today) / 86400000);
 }
 
+function dateFromKey(value) {
+  const [year, month, day] = String(value || "").split("-").map(Number);
+  if (!year || !month || !day) return null;
+  const date = new Date(year, month - 1, day);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+function dateKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function addMonthsClamped(date, months, preferredDay = date.getDate()) {
+  const next = new Date(date);
+  next.setDate(1);
+  next.setMonth(next.getMonth() + months);
+  const lastDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+  next.setDate(Math.min(preferredDay, lastDay));
+  next.setHours(0, 0, 0, 0);
+  return next;
+}
+
+function addCadenceCycle(date, cadence, preferredDay) {
+  if (cadence === "weekly") {
+    const next = new Date(date);
+    next.setDate(next.getDate() + 7);
+    next.setHours(0, 0, 0, 0);
+    return next;
+  }
+
+  if (cadence === "yearly") return addMonthsClamped(date, 12, preferredDay);
+  if (cadence === "biannual") return addMonthsClamped(date, 24, preferredDay);
+  return addMonthsClamped(date, 1, preferredDay);
+}
+
+function nextRenewalDate(value, cadence, reference = new Date()) {
+  const today = new Date(reference);
+  today.setHours(0, 0, 0, 0);
+
+  let renewal = dateFromKey(value);
+  if (!renewal) return value;
+
+  const preferredDay = renewal.getDate();
+  while (renewal < today) {
+    renewal = addCadenceCycle(renewal, cadence, preferredDay);
+  }
+
+  return dateKey(renewal);
+}
+
+function normalizeSubscriptionRenewal(subscription) {
+  const renewalDate = nextRenewalDate(subscription.renewalDate, subscription.cadence);
+  return renewalDate === subscription.renewalDate ? subscription : { ...subscription, renewalDate };
+}
+
 function monthlyCost(subscription) {
   const price = Number(subscription.price || 0);
   if (subscription.cadence === "yearly") return price / 12;
@@ -326,6 +384,25 @@ function App() {
   }, []);
 
   useEffect(() => {
+    function advancePastRenewals() {
+      setData((current) => {
+        let changed = false;
+        const subscriptions = current.subscriptions.map((subscription) => {
+          const normalized = normalizeSubscriptionRenewal(subscription);
+          if (normalized !== subscription) changed = true;
+          return normalized;
+        });
+
+        return changed ? { ...current, subscriptions } : current;
+      });
+    }
+
+    advancePastRenewals();
+    const timer = window.setInterval(advancePastRenewals, 60 * 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
     function preventNumberWheel(event) {
       if (event.target instanceof HTMLInputElement && event.target.type === "number") {
         event.preventDefault();
@@ -444,7 +521,10 @@ function App() {
     () => [...data.categories].sort((a, b) => textSorter.compare(a.name, b.name)),
     [data.categories]
   );
-  const subscriptions = data.subscriptions;
+  const subscriptions = useMemo(
+    () => data.subscriptions.map(normalizeSubscriptionRenewal),
+    [data.subscriptions]
+  );
 
   const filtered = useMemo(() => {
     const visible = subscriptions
@@ -581,7 +661,7 @@ function App() {
         }
 
         setData({
-          subscriptions: imported.subscriptions,
+          subscriptions: imported.subscriptions.map(normalizeSubscriptionRenewal),
           categories: imported.categories,
           currency: imported.currency || "EUR",
           notificationsEnabled: Boolean(imported.notificationsEnabled),
@@ -637,13 +717,14 @@ function App() {
   }
 
   function saveSubscription(subscription) {
+    const normalizedSubscription = normalizeSubscriptionRenewal(subscription);
     setData((current) => {
-      const exists = current.subscriptions.some((item) => item.id === subscription.id);
+      const exists = current.subscriptions.some((item) => item.id === normalizedSubscription.id);
       return {
         ...current,
         subscriptions: exists
-          ? current.subscriptions.map((item) => (item.id === subscription.id ? subscription : item))
-          : [{ ...subscription, id: crypto.randomUUID() }, ...current.subscriptions]
+          ? current.subscriptions.map((item) => (item.id === normalizedSubscription.id ? normalizedSubscription : item))
+          : [{ ...normalizedSubscription, id: crypto.randomUUID() }, ...current.subscriptions]
       };
     });
   }
