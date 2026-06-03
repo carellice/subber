@@ -1,4 +1,4 @@
-const CACHE_NAME = "subber-v4";
+const CACHE_NAME = "subber-v5";
 const APP_SHELL = [
   "/",
   "/index.html",
