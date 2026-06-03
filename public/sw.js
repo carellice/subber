@@ -1,8 +1,9 @@
-const CACHE_NAME = "subber-v5";
+const CACHE_NAME = "subber-v6";
 const APP_SHELL = [
   "/",
   "/index.html",
   "/logo.png",
+  "/logo-maskable.png",
   "/manifest.webmanifest",
   "/fonts/AutopromPro-BlackRoundedItalic.otf",
   "/dueffe/logo%20dueffe%20dark%20appbar.png",
