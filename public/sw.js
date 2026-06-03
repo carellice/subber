@@ -1,4 +1,4 @@
-const CACHE_NAME = "subber-v3";
+const CACHE_NAME = "subber-v4";
 const APP_SHELL = [
   "/",
   "/index.html",
@@ -6,11 +6,7 @@ const APP_SHELL = [
   "/manifest.webmanifest",
   "/fonts/AutopromPro-BlackRoundedItalic.otf",
   "/dueffe/logo%20dueffe%20dark%20appbar.png",
-  "/dueffe/logo%20dueffe%20light%20appbar.png",
-  "/dueffe/logo%20dueffe%20dark%20no%20sfondo.png",
-  "/dueffe/logo%20dueffe%20light%20no%20sfondo.png",
-  "/dueffe/logo%20dueffe%20dark.png",
-  "/dueffe/logo%20dueffe%20light.png"
+  "/dueffe/logo%20dueffe%20light%20appbar.png"
 ];
 const CACHE_FIRST_PATHS = new Set(APP_SHELL.filter((url) => url !== "/" && url !== "/index.html"));
 

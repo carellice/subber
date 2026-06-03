@@ -10,7 +10,7 @@
   "theme_color": "#ffffff",
   "icons": [
     {
-      "src": "/dueffe/logo%20dueffe%20dark%20no%20sfondo.png",
+      "src": "/logo.png",
       "sizes": "1024x1024",
       "type": "image/png",
       "purpose": "any"
