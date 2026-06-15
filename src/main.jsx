@@ -54,6 +54,9 @@ import {
 import "./styles.css";
 
 const STORAGE_KEY = "subber-data-v1";
+const THEME_STORAGE_KEY = "subber-theme-v1";
+const SORT_MODE_STORAGE_KEY = "subber-sort-mode-v1";
+const SORT_DIRECTION_STORAGE_KEY = "subber-sort-direction-v1";
 const REMINDER_DAYS = [1, 3, 7, 14, 30];
 const SORT_OPTIONS = [
   { value: "name", label: "Nome" },
@@ -299,6 +302,15 @@ function themeLabel(theme) {
   return { system: "Automatico", dark: "Scuro", light: "Chiaro" }[theme] || "Automatico";
 }
 
+function loadStoredPreference(key, fallback, allowedValues) {
+  try {
+    const value = localStorage.getItem(key);
+    return allowedValues.includes(value) ? value : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 function isNativeApp() {
   return Capacitor.isNativePlatform?.() || false;
 }
@@ -334,9 +346,13 @@ function App() {
   const [selectedSub, setSelectedSub] = useState(null);
   const [editingCategory, setEditingCategory] = useState(null);
   const [closingModal, setClosingModal] = useState(null);
-  const [subscriptionSort, setSubscriptionSort] = useState("name");
-  const [subscriptionSortDirection, setSubscriptionSortDirection] = useState("asc");
-  const [theme, setTheme] = useState("system");
+  const [subscriptionSort, setSubscriptionSort] = useState(() =>
+    loadStoredPreference(SORT_MODE_STORAGE_KEY, "name", SORT_OPTIONS.map((option) => option.value))
+  );
+  const [subscriptionSortDirection, setSubscriptionSortDirection] = useState(() =>
+    loadStoredPreference(SORT_DIRECTION_STORAGE_KEY, "asc", ["asc", "desc"])
+  );
+  const [theme, setTheme] = useState(() => loadStoredPreference(THEME_STORAGE_KEY, "system", ["system", "dark", "light"]));
   const [activeTab, setActiveTab] = useState("home");
   const [desktopMenuOpen, setDesktopMenuOpen] = useState(false);
   const [brandCompact, setBrandCompact] = useState(false);
@@ -355,6 +371,18 @@ function App() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   }, [data]);
+
+  useEffect(() => {
+    localStorage.setItem(THEME_STORAGE_KEY, theme);
+  }, [theme]);
+
+  useEffect(() => {
+    localStorage.setItem(SORT_MODE_STORAGE_KEY, subscriptionSort);
+  }, [subscriptionSort]);
+
+  useEffect(() => {
+    localStorage.setItem(SORT_DIRECTION_STORAGE_KEY, subscriptionSortDirection);
+  }, [subscriptionSortDirection]);
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "instant" });
@@ -538,10 +566,10 @@ function App() {
 
   const stats = useMemo(() => {
     const monthly = subscriptions.reduce((sum, sub) => sum + monthlyCost(sub), 0);
-    const next = [...subscriptions].sort((a, b) => daysUntil(a.renewalDate) - daysUntil(b.renewalDate))[0];
+    const next = sortSubscriptions(subscriptions, "renewal", "asc", categories)[0];
     const soon = subscriptions.filter((sub) => daysUntil(sub.renewalDate) <= Number(sub.reminderDays || 3)).length;
     return { monthly, yearly: monthly * 12, next, soon };
-  }, [subscriptions]);
+  }, [subscriptions, categories]);
 
   const categoryTotals = useMemo(() => {
     return categories
@@ -708,8 +736,14 @@ function App() {
     }
 
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(THEME_STORAGE_KEY);
+    localStorage.removeItem(SORT_MODE_STORAGE_KEY);
+    localStorage.removeItem(SORT_DIRECTION_STORAGE_KEY);
     setActiveCategory("all");
     setQuery("");
+    setSubscriptionSort("name");
+    setSubscriptionSortDirection("asc");
+    setTheme("system");
     setEditingSub(null);
     setSelectedSub(null);
     setEditingCategory(null);
@@ -1273,7 +1307,17 @@ function SubscriptionsPage({
     <div className="screen-grid">
       <div className="search-box expressive-search">
         <Search size={19} />
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cerca abbonamento" />
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Cerca abbonamento"
+          type="search"
+        />
+        {query && (
+          <button className="search-clear" type="button" onClick={() => setQuery("")} aria-label="Svuota ricerca">
+            <X size={17} />
+          </button>
+        )}
       </div>
 
       <div className="category-filter-row">

@@ -34,6 +34,8 @@
   --nav: rgba(8, 7, 5, 0.94);
   --shadow: 0 28px 90px rgba(0, 0, 0, 0.48);
   --gold-glow: 0 0 34px rgba(255, 206, 68, 0.22);
+  --input-focus-line: rgba(255, 250, 240, 0.32);
+  --input-focus-ring: rgba(255, 250, 240, 0.08);
 }
 
 :root[data-theme="light"] {
@@ -60,6 +62,8 @@
   --nav: rgba(255, 255, 255, 0.92);
   --shadow: 0 24px 70px rgba(5, 5, 5, 0.14);
   --gold-glow: 0 0 30px rgba(210, 161, 42, 0.18);
+  --input-focus-line: rgba(5, 5, 5, 0.28);
+  --input-focus-ring: rgba(5, 5, 5, 0.07);
 }
 
 * {
@@ -1206,11 +1210,44 @@ label,
 
 .search-box input {
   width: 100%;
+  flex: 1;
   min-width: 0;
   border: 0;
   outline: 0;
   color: var(--text);
   background: transparent;
+}
+
+.search-box input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.search-box input:-webkit-autofill,
+.search-box input:-webkit-autofill:hover,
+.search-box input:-webkit-autofill:focus {
+  box-shadow: 0 0 0 1000px color-mix(in srgb, var(--surface) 88%, var(--surface-high) 12%) inset;
+}
+
+.search-clear {
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--surface-high) 78%, transparent);
+  transition: color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.search-clear:hover,
+.search-clear:focus-visible {
+  color: var(--text);
+  background: color-mix(in srgb, var(--primary) 16%, var(--surface-high));
+}
+
+.search-clear:active {
+  transform: scale(0.94);
 }
 
 .category-filter-row,
@@ -2186,14 +2223,42 @@ textarea {
   border-radius: 16px;
   outline: 0;
   color: var(--text);
+  color-scheme: dark;
   background: color-mix(in srgb, var(--surface-high) 72%, transparent);
+}
+
+:root[data-theme="light"] input,
+:root[data-theme="light"] select,
+:root[data-theme="light"] textarea {
+  color-scheme: light;
+}
+
+select option {
+  color: #fffaf0;
+  background: #11100d;
+}
+
+:root[data-theme="light"] select option {
+  color: #050505;
+  background: #ffffff;
 }
 
 input:focus,
 select:focus,
 textarea:focus {
-  border-color: color-mix(in srgb, var(--primary) 54%, var(--line));
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 12%, transparent);
+  border-color: var(--line);
+  box-shadow: none;
+}
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  -webkit-text-fill-color: var(--text);
+  caret-color: var(--text);
+  transition: background-color 9999s ease-out;
+  box-shadow: 0 0 0 1000px var(--surface-high) inset;
 }
 
 input[type="number"] {
