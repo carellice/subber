@@ -1809,6 +1809,114 @@ label,
   cursor: default;
 }
 
+.settings-panel {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 26px;
+  background: var(--surface-container);
+}
+
+.settings-panel-head,
+.account-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.settings-panel-head > div,
+.account-summary > div {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+  flex: 1;
+}
+
+.settings-panel-head strong {
+  font-size: 1rem;
+}
+
+.settings-panel-head small,
+.account-summary small,
+.sync-note {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.sync-note {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.account-summary span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: var(--text);
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+
+.sync-pill {
+  width: fit-content;
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-high) 78%, transparent);
+}
+
+.sync-pill.synced {
+  color: #87f6b0;
+  border-color: color-mix(in srgb, #66e38e 46%, var(--line));
+}
+
+.sync-pill.error {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 48%, var(--line));
+}
+
+.auth-form {
+  display: grid;
+  gap: 12px;
+}
+
+.auth-form label {
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 900;
+}
+
+.auth-toggle {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface) 75%, transparent);
+}
+
+.auth-toggle button {
+  min-height: 36px;
+  border-radius: 12px;
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.auth-toggle button.active {
+  color: var(--on-primary);
+  background: linear-gradient(135deg, var(--primary), var(--primary-strong));
+}
+
+.auth-submit {
+  width: 100%;
+  justify-content: center;
+}
+
 .switch-control {
   width: 52px;
   height: 32px;

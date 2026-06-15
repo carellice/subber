@@ -4,6 +4,23 @@ import { createPortal } from "react-dom";
 import { App as CapacitorApp } from "@capacitor/app";
 import { Capacitor } from "@capacitor/core";
 import { LocalNotifications } from "@capacitor/local-notifications";
+import {
+  createUserWithEmailAndPassword,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut
+} from "firebase/auth";
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  onSnapshot,
+  serverTimestamp,
+  setDoc,
+  writeBatch
+} from "firebase/firestore";
 import { FaAmazon, FaMicrosoft, FaXbox } from "react-icons/fa";
 import { SiOpenai } from "react-icons/si";
 import {
@@ -30,6 +47,7 @@ import {
   Check,
   ChevronRight,
   CircleDollarSign,
+  Cloud,
   Clock3,
   Download,
   Edit3,
@@ -37,6 +55,9 @@ import {
   FolderKanban,
   Home,
   LayoutDashboard,
+  LogIn,
+  LogOut,
+  Mail,
   Monitor,
   Moon,
   Palette,
@@ -51,12 +72,14 @@ import {
   WalletCards,
   X
 } from "lucide-react";
+import { auth, db, isFirebaseConfigured } from "./firebase";
 import "./styles.css";
 
 const STORAGE_KEY = "subber-data-v1";
 const THEME_STORAGE_KEY = "subber-theme-v1";
 const SORT_MODE_STORAGE_KEY = "subber-sort-mode-v1";
 const SORT_DIRECTION_STORAGE_KEY = "subber-sort-direction-v1";
+const CLOUD_SETTINGS_ID = "main";
 const REMINDER_DAYS = [1, 3, 7, 14, 30];
 const SORT_OPTIONS = [
   { value: "name", label: "Nome" },
@@ -315,6 +338,119 @@ function isNativeApp() {
   return Capacitor.isNativePlatform?.() || false;
 }
 
+function allowedRegistrationEmails() {
+  return String(import.meta.env.VITE_FIREBASE_ALLOWED_EMAILS || "")
+    .split(",")
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function isEmailAllowedForRegistration(email) {
+  const allowed = allowedRegistrationEmails();
+  if (!allowed.length) return true;
+  return allowed.includes(String(email || "").trim().toLowerCase());
+}
+
+function authErrorMessage(error) {
+  const code = error?.code || "";
+  if (code.includes("invalid-email")) return "Email non valida.";
+  if (code.includes("email-already-in-use")) return "Esiste gia' un account con questa email.";
+  if (code.includes("weak-password")) return "La password deve avere almeno 6 caratteri.";
+  if (code.includes("user-not-found") || code.includes("wrong-password") || code.includes("invalid-credential")) {
+    return "Email o password non corrette.";
+  }
+  if (code.includes("too-many-requests")) return "Troppi tentativi. Riprova piu' tardi.";
+  return error?.message || "Operazione Firebase non riuscita.";
+}
+
+function hasLocalUserData(data) {
+  const customCategories = JSON.stringify(data.categories) !== JSON.stringify(defaultCategories);
+  return Boolean(
+    data.subscriptions.length ||
+      customCategories ||
+      data.onboardingCompleted ||
+      data.showMonthlyInList ||
+      data.notificationsEnabled ||
+      Object.keys(data.dismissedNotifications || {}).length
+  );
+}
+
+function serializeCategory(category) {
+  return {
+    id: category.id,
+    name: category.name || "Categoria",
+    color: category.color || "#ffd84d",
+    updatedAt: serverTimestamp()
+  };
+}
+
+function serializeSubscription(subscription) {
+  const normalized = normalizeSubscriptionRenewal(subscription);
+  return {
+    id: normalized.id,
+    name: normalized.name || "Abbonamento",
+    price: Number(normalized.price || 0),
+    cadence: normalized.cadence || "monthly",
+    categoryId: normalized.categoryId || "streaming",
+    renewalDate: normalized.renewalDate || nextDate(7),
+    reminderDays: Number(normalized.reminderDays || 3),
+    imagePreset: normalized.imagePreset || "",
+    imageData: normalized.imageData || "",
+    note: normalized.note || "",
+    updatedAt: serverTimestamp()
+  };
+}
+
+function deserializeCategory(snapshot) {
+  const data = snapshot.data();
+  return {
+    id: snapshot.id,
+    name: data.name || "Categoria",
+    color: data.color || "#ffd84d"
+  };
+}
+
+function deserializeSubscription(snapshot) {
+  const data = snapshot.data();
+  return normalizeSubscriptionRenewal({
+    id: snapshot.id,
+    name: data.name || "Abbonamento",
+    price: data.price ?? 0,
+    cadence: data.cadence || "monthly",
+    categoryId: data.categoryId || "streaming",
+    renewalDate: data.renewalDate || nextDate(7),
+    reminderDays: data.reminderDays ?? 3,
+    imagePreset: data.imagePreset || "",
+    imageData: data.imageData || "",
+    note: data.note || ""
+  });
+}
+
+function settingsFromState(data, theme, subscriptionSort, subscriptionSortDirection) {
+  return {
+    currency: data.currency || "EUR",
+    notificationsEnabled: Boolean(data.notificationsEnabled),
+    dismissedNotifications: data.dismissedNotifications || {},
+    onboardingCompleted: Boolean(data.onboardingCompleted),
+    showMonthlyInList: Boolean(data.showMonthlyInList),
+    theme,
+    subscriptionSort,
+    subscriptionSortDirection,
+    updatedAt: serverTimestamp()
+  };
+}
+
+function applyRemoteSettings(settings, current) {
+  return {
+    ...current,
+    currency: settings.currency || "EUR",
+    notificationsEnabled: Boolean(settings.notificationsEnabled),
+    dismissedNotifications: settings.dismissedNotifications || {},
+    onboardingCompleted: settings.onboardingCompleted ?? current.onboardingCompleted,
+    showMonthlyInList: Boolean(settings.showMonthlyInList)
+  };
+}
+
 function notificationId(subscription, suffix = 0) {
   const text = `${subscription.id}-${subscription.renewalDate}-${suffix}`;
   let hash = 0;
@@ -338,6 +474,66 @@ async function nativeNotificationPermission() {
   return requested.display === "granted";
 }
 
+async function uploadUserDataToCloud(uid, data, preferences) {
+  if (!db) return;
+
+  const batch = writeBatch(db);
+  const userRef = doc(db, "users", uid);
+
+  batch.set(
+    userRef,
+    {
+      email: auth?.currentUser?.email || "",
+      schemaVersion: 1,
+      updatedAt: serverTimestamp()
+    },
+    { merge: true }
+  );
+
+  batch.set(
+    doc(db, "users", uid, "settings", CLOUD_SETTINGS_ID),
+    settingsFromState(data, preferences.theme, preferences.subscriptionSort, preferences.subscriptionSortDirection),
+    { merge: true }
+  );
+
+  data.categories.forEach((category) => {
+    const categoryId = category.id || crypto.randomUUID();
+    batch.set(doc(db, "users", uid, "categories", categoryId), serializeCategory({ ...category, id: categoryId }));
+  });
+
+  data.subscriptions.forEach((subscription) => {
+    const subscriptionId = subscription.id || crypto.randomUUID();
+    batch.set(
+      doc(db, "users", uid, "subscriptions", subscriptionId),
+      serializeSubscription({ ...subscription, id: subscriptionId })
+    );
+  });
+
+  await batch.commit();
+}
+
+async function deleteUserCloudData(uid) {
+  if (!db) return;
+
+  const [categoriesSnapshot, subscriptionsSnapshot, settingsSnapshot] = await Promise.all([
+    getDocs(collection(db, "users", uid, "categories")),
+    getDocs(collection(db, "users", uid, "subscriptions")),
+    getDocs(collection(db, "users", uid, "settings"))
+  ]);
+
+  const batch = writeBatch(db);
+  categoriesSnapshot.forEach((snapshot) => batch.delete(snapshot.ref));
+  subscriptionsSnapshot.forEach((snapshot) => batch.delete(snapshot.ref));
+  settingsSnapshot.forEach((snapshot) => batch.delete(snapshot.ref));
+  batch.delete(doc(db, "users", uid));
+  await batch.commit();
+}
+
+async function replaceUserCloudData(uid, data, preferences) {
+  await deleteUserCloudData(uid);
+  await uploadUserDataToCloud(uid, data, preferences);
+}
+
 function App() {
   const [data, setData] = useState(loadData);
   const [activeCategory, setActiveCategory] = useState("all");
@@ -356,9 +552,17 @@ function App() {
   const [activeTab, setActiveTab] = useState("home");
   const [desktopMenuOpen, setDesktopMenuOpen] = useState(false);
   const [brandCompact, setBrandCompact] = useState(false);
+  const [authReady, setAuthReady] = useState(!isFirebaseConfigured);
+  const [authUser, setAuthUser] = useState(null);
+  const [cloudReady, setCloudReady] = useState(false);
+  const [syncStatus, setSyncStatus] = useState({
+    state: isFirebaseConfigured ? "idle" : "disabled",
+    message: isFirebaseConfigured ? "Accedi per sincronizzare i dati." : "Firebase non e' configurato."
+  });
   const modalHistoryActive = useRef(false);
   const pendingModalClose = useRef(null);
   const backupInputRef = useRef(null);
+  const dataRef = useRef(data);
 
   function selectTab(tab) {
     setActiveTab(tab);
@@ -367,6 +571,181 @@ function App() {
       document.querySelector(".app-shell")?.scrollTo?.({ top: 0, left: 0, behavior: "instant" });
     });
   }
+
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
+
+  useEffect(() => {
+    if (!isFirebaseConfigured || !auth) return undefined;
+
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setAuthUser(user);
+      setAuthReady(true);
+      setCloudReady(false);
+      setSyncStatus({
+        state: user ? "syncing" : "idle",
+        message: user ? "Connessione a Firebase..." : "Accedi per sincronizzare i dati."
+      });
+    });
+
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    if (!isFirebaseConfigured || !db || !authUser) {
+      setCloudReady(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+    const unsubscribers = [];
+
+    async function bootstrapCloudSync() {
+      try {
+        setSyncStatus({ state: "syncing", message: "Controllo dati cloud..." });
+
+        const uid = authUser.uid;
+        const settingsRef = doc(db, "users", uid, "settings", CLOUD_SETTINGS_ID);
+        const categoriesRef = collection(db, "users", uid, "categories");
+        const subscriptionsRef = collection(db, "users", uid, "subscriptions");
+
+        const [settingsSnapshot, categoriesSnapshot, subscriptionsSnapshot] = await Promise.all([
+          getDoc(settingsRef),
+          getDocs(categoriesRef),
+          getDocs(subscriptionsRef)
+        ]);
+
+        if (cancelled) return;
+
+        const remoteExists = settingsSnapshot.exists() || !categoriesSnapshot.empty || !subscriptionsSnapshot.empty;
+        const localSnapshot = dataRef.current;
+
+        if (!remoteExists) {
+          const dataToUpload = hasLocalUserData(localSnapshot) ? localSnapshot : initialData();
+          await uploadUserDataToCloud(uid, dataToUpload, {
+            theme,
+            subscriptionSort,
+            subscriptionSortDirection
+          });
+          if (cancelled) return;
+        } else {
+          const nextCategories = categoriesSnapshot.empty
+            ? defaultCategories
+            : categoriesSnapshot.docs.map(deserializeCategory);
+          const nextSubscriptions = subscriptionsSnapshot.docs.map(deserializeSubscription);
+
+          setData((current) => ({
+            ...current,
+            ...(settingsSnapshot.exists() ? applyRemoteSettings(settingsSnapshot.data(), current) : {}),
+            categories: nextCategories,
+            subscriptions: nextSubscriptions
+          }));
+
+          if (settingsSnapshot.exists()) {
+            const settings = settingsSnapshot.data();
+            if (["system", "dark", "light"].includes(settings.theme)) setTheme(settings.theme);
+            if (SORT_OPTIONS.some((option) => option.value === settings.subscriptionSort)) {
+              setSubscriptionSort(settings.subscriptionSort);
+            }
+            if (["asc", "desc"].includes(settings.subscriptionSortDirection)) {
+              setSubscriptionSortDirection(settings.subscriptionSortDirection);
+            }
+          }
+        }
+
+        const unsubscribeSettings = onSnapshot(
+          settingsRef,
+          (snapshot) => {
+            if (!snapshot.exists()) return;
+            const settings = snapshot.data();
+
+            setData((current) => applyRemoteSettings(settings, current));
+            if (["system", "dark", "light"].includes(settings.theme)) setTheme(settings.theme);
+            if (SORT_OPTIONS.some((option) => option.value === settings.subscriptionSort)) {
+              setSubscriptionSort(settings.subscriptionSort);
+            }
+            if (["asc", "desc"].includes(settings.subscriptionSortDirection)) {
+              setSubscriptionSortDirection(settings.subscriptionSortDirection);
+            }
+          },
+          () => {
+            setSyncStatus({ state: "error", message: "Errore durante la sync delle impostazioni." });
+          }
+        );
+
+        const unsubscribeCategories = onSnapshot(
+          categoriesRef,
+          (snapshot) => {
+            const remoteCategories = snapshot.empty
+              ? defaultCategories
+              : snapshot.docs.map(deserializeCategory);
+            setData((current) => ({ ...current, categories: remoteCategories }));
+          },
+          () => {
+            setSyncStatus({ state: "error", message: "Errore durante la sync delle categorie." });
+          }
+        );
+
+        const unsubscribeSubscriptions = onSnapshot(
+          subscriptionsRef,
+          (snapshot) => {
+            const remoteSubscriptions = snapshot.docs.map(deserializeSubscription);
+            setData((current) => ({ ...current, subscriptions: remoteSubscriptions }));
+          },
+          () => {
+            setSyncStatus({ state: "error", message: "Errore durante la sync degli abbonamenti." });
+          }
+        );
+
+        unsubscribers.push(unsubscribeSettings, unsubscribeCategories, unsubscribeSubscriptions);
+        setCloudReady(true);
+        setSyncStatus({ state: "synced", message: "Sincronizzazione Firebase attiva." });
+      } catch (error) {
+        if (!cancelled) {
+          setCloudReady(false);
+          setSyncStatus({
+            state: "error",
+            message: error?.message || "Firebase non e' raggiungibile."
+          });
+        }
+      }
+    }
+
+    bootstrapCloudSync();
+
+    return () => {
+      cancelled = true;
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
+    };
+  }, [authUser]);
+
+  useEffect(() => {
+    if (!isFirebaseConfigured || !db || !authUser || !cloudReady) return undefined;
+
+    const timer = window.setTimeout(() => {
+      setDoc(
+        doc(db, "users", authUser.uid, "settings", CLOUD_SETTINGS_ID),
+        settingsFromState(data, theme, subscriptionSort, subscriptionSortDirection),
+        { merge: true }
+      ).catch((error) => {
+        setSyncStatus({ state: "error", message: error?.message || "Impostazioni non sincronizzate." });
+      });
+    }, 450);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    authUser,
+    cloudReady,
+    data.currency,
+    data.notificationsEnabled,
+    data.dismissedNotifications,
+    data.onboardingCompleted,
+    data.showMonthlyInList,
+    theme,
+    subscriptionSort,
+    subscriptionSortDirection
+  ]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -583,6 +962,83 @@ function App() {
       .sort((a, b) => textSorter.compare(a.name, b.name));
   }, [categories, subscriptions]);
 
+  async function submitAuth({ email, password, mode }) {
+    if (!isFirebaseConfigured || !auth) {
+      setSyncStatus({ state: "disabled", message: "Configura Firebase nelle variabili d'ambiente." });
+      return;
+    }
+
+    if (mode === "signup" && !isEmailAllowedForRegistration(email)) {
+      setSyncStatus({ state: "error", message: "Questa email non e' autorizzata alla registrazione." });
+      return;
+    }
+
+    try {
+      setSyncStatus({ state: "syncing", message: mode === "signup" ? "Creazione account..." : "Accesso in corso..." });
+      if (mode === "signup") {
+        await createUserWithEmailAndPassword(auth, email.trim(), password);
+      } else {
+        await signInWithEmailAndPassword(auth, email.trim(), password);
+      }
+    } catch (error) {
+      setSyncStatus({ state: "error", message: authErrorMessage(error) });
+    }
+  }
+
+  async function signOutFromFirebase() {
+    if (!auth) return;
+
+    try {
+      await signOut(auth);
+      setCloudReady(false);
+      setSyncStatus({ state: "idle", message: "Logout completato. I dati restano salvati su questo dispositivo." });
+    } catch (error) {
+      setSyncStatus({ state: "error", message: error?.message || "Logout non riuscito." });
+    }
+  }
+
+  function persistCloudSubscription(subscription) {
+    if (!db || !authUser || !cloudReady) return;
+    setDoc(
+      doc(db, "users", authUser.uid, "subscriptions", subscription.id),
+      serializeSubscription(subscription)
+    ).catch((error) => {
+      setSyncStatus({ state: "error", message: error?.message || "Abbonamento non sincronizzato." });
+    });
+  }
+
+  function persistCloudCategory(category) {
+    if (!db || !authUser || !cloudReady) return;
+    setDoc(doc(db, "users", authUser.uid, "categories", category.id), serializeCategory(category)).catch((error) => {
+      setSyncStatus({ state: "error", message: error?.message || "Categoria non sincronizzata." });
+    });
+  }
+
+  function removeCloudSubscription(id) {
+    if (!db || !authUser || !cloudReady) return;
+    deleteDoc(doc(db, "users", authUser.uid, "subscriptions", id)).catch((error) => {
+      setSyncStatus({ state: "error", message: error?.message || "Eliminazione remota non riuscita." });
+    });
+  }
+
+  function removeCloudCategory(id, nextSubscriptions) {
+    if (!db || !authUser || !cloudReady) return;
+
+    const batch = writeBatch(db);
+    batch.delete(doc(db, "users", authUser.uid, "categories", id));
+    nextSubscriptions
+      .filter((subscription) => subscription.categoryId !== id)
+      .forEach((subscription) => {
+        batch.set(
+          doc(db, "users", authUser.uid, "subscriptions", subscription.id),
+          serializeSubscription(subscription)
+        );
+      });
+    batch.commit().catch((error) => {
+      setSyncStatus({ state: "error", message: error?.message || "Categoria non eliminata dal cloud." });
+    });
+  }
+
   async function enableNotifications() {
     if (isNativeApp()) {
       const granted = await nativeNotificationPermission();
@@ -699,6 +1155,23 @@ function App() {
           onboardingCompleted: true,
           showMonthlyInList: Boolean(imported.showMonthlyInList)
         });
+        if (authUser && cloudReady) {
+          void replaceUserCloudData(
+            authUser.uid,
+            {
+              subscriptions: imported.subscriptions.map(normalizeSubscriptionRenewal),
+              categories: imported.categories,
+              currency: imported.currency || "EUR",
+              notificationsEnabled: Boolean(imported.notificationsEnabled),
+              dismissedNotifications: imported.dismissedNotifications || {},
+              onboardingCompleted: true,
+              showMonthlyInList: Boolean(imported.showMonthlyInList)
+            },
+            { theme, subscriptionSort, subscriptionSortDirection }
+          ).catch((error) => {
+            setSyncStatus({ state: "error", message: error?.message || "Backup importato solo in locale." });
+          });
+        }
         window.alert("Backup ripristinato correttamente.");
       } catch {
         window.alert("Il file selezionato non sembra un backup valido di Subber.");
@@ -711,7 +1184,9 @@ function App() {
 
   async function clearAppData() {
     const firstConfirmation = window.confirm(
-      "Vuoi cancellare tutti i dati di Subber da questo dispositivo? L'operazione non puo' essere annullata."
+      authUser
+        ? "Vuoi cancellare tutti i dati di Subber da questo dispositivo e da Firebase? L'operazione non puo' essere annullata."
+        : "Vuoi cancellare tutti i dati di Subber da questo dispositivo? L'operazione non puo' essere annullata."
     );
     if (!firstConfirmation) return;
 
@@ -739,6 +1214,17 @@ function App() {
     localStorage.removeItem(THEME_STORAGE_KEY);
     localStorage.removeItem(SORT_MODE_STORAGE_KEY);
     localStorage.removeItem(SORT_DIRECTION_STORAGE_KEY);
+    if (authUser && cloudReady) {
+      try {
+        await replaceUserCloudData(authUser.uid, initialData(), {
+          theme: "system",
+          subscriptionSort: "name",
+          subscriptionSortDirection: "asc"
+        });
+      } catch (error) {
+        setSyncStatus({ state: "error", message: error?.message || "Dati locali cancellati, cloud non cancellato." });
+      }
+    }
     setActiveCategory("all");
     setQuery("");
     setSubscriptionSort("name");
@@ -754,15 +1240,19 @@ function App() {
 
   function saveSubscription(subscription) {
     const normalizedSubscription = normalizeSubscriptionRenewal(subscription);
+    const subscriptionToSave = normalizedSubscription.id
+      ? normalizedSubscription
+      : { ...normalizedSubscription, id: crypto.randomUUID() };
     setData((current) => {
-      const exists = current.subscriptions.some((item) => item.id === normalizedSubscription.id);
+      const exists = current.subscriptions.some((item) => item.id === subscriptionToSave.id);
       return {
         ...current,
         subscriptions: exists
-          ? current.subscriptions.map((item) => (item.id === normalizedSubscription.id ? normalizedSubscription : item))
-          : [{ ...normalizedSubscription, id: crypto.randomUUID() }, ...current.subscriptions]
+          ? current.subscriptions.map((item) => (item.id === subscriptionToSave.id ? subscriptionToSave : item))
+          : [subscriptionToSave, ...current.subscriptions]
       };
     });
+    persistCloudSubscription(subscriptionToSave);
   }
 
   function removeSubscription(id) {
@@ -770,18 +1260,21 @@ function App() {
       ...current,
       subscriptions: current.subscriptions.filter((sub) => sub.id !== id)
     }));
+    removeCloudSubscription(id);
   }
 
   function saveCategory(category) {
+    const categoryToSave = category.id ? category : { ...category, id: crypto.randomUUID() };
     setData((current) => {
-      const exists = current.categories.some((item) => item.id === category.id);
+      const exists = current.categories.some((item) => item.id === categoryToSave.id);
       return {
         ...current,
         categories: exists
-          ? current.categories.map((item) => (item.id === category.id ? category : item))
-          : [...current.categories, { ...category, id: crypto.randomUUID() }]
+          ? current.categories.map((item) => (item.id === categoryToSave.id ? categoryToSave : item))
+          : [...current.categories, categoryToSave]
       };
     });
+    persistCloudCategory(categoryToSave);
   }
 
   function closeWithAnimation(key, afterClose) {
@@ -877,11 +1370,15 @@ function App() {
 
   function removeCategory(id) {
     const fallback = categories.find((cat) => cat.id !== id)?.id || "streaming";
+    const nextSubscriptions = data.subscriptions.map((sub) =>
+      sub.categoryId === id ? { ...sub, categoryId: fallback } : sub
+    );
     setData((current) => ({
       ...current,
       categories: current.categories.filter((cat) => cat.id !== id),
       subscriptions: current.subscriptions.map((sub) => (sub.categoryId === id ? { ...sub, categoryId: fallback } : sub))
     }));
+    removeCloudCategory(id, nextSubscriptions);
     if (activeCategory === id) setActiveCategory("all");
   }
 
@@ -1017,6 +1514,12 @@ function App() {
             showMonthlyInList={data.showMonthlyInList}
             onToggleMonthlyInList={() => setData((current) => ({ ...current, showMonthlyInList: !current.showMonthlyInList }))}
             onClearAppData={clearAppData}
+            firebaseConfigured={isFirebaseConfigured}
+            authReady={authReady}
+            authUser={authUser}
+            syncStatus={syncStatus}
+            onSubmitAuth={submitAuth}
+            onSignOut={signOutFromFirebase}
           />
         )}
       </section>
@@ -1433,19 +1936,110 @@ function SettingsPage({
   onSelectTheme,
   showMonthlyInList,
   onToggleMonthlyInList,
-  onClearAppData
+  onClearAppData,
+  firebaseConfigured,
+  authReady,
+  authUser,
+  syncStatus,
+  onSubmitAuth,
+  onSignOut
 }) {
+  const [authMode, setAuthMode] = useState("signin");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const themeOptions = [
     { value: "system", label: "Auto", Icon: Monitor },
     { value: "dark", label: "Scuro", Icon: Moon },
     { value: "light", label: "Chiaro", Icon: Sun }
   ];
 
+  function handleAuthSubmit(event) {
+    event.preventDefault();
+    onSubmitAuth({ email, password, mode: authMode });
+  }
+
   return (
     <div className="screen-grid">
       <section className="page-hero settings-hero">
         <span><Settings size={18} /> Preferenze</span>
-        <p>Gestisci promemoria, tema e salvataggio locale dell'app.</p>
+        <p>Gestisci promemoria, tema e sincronizzazione dei dati.</p>
+      </section>
+
+      <section className="settings-panel account-panel">
+        <div className="settings-panel-head">
+          <span className="icon-surface"><Cloud size={20} /></span>
+          <div>
+            <strong>Account e sincronizzazione</strong>
+            <small>{syncStatus.message}</small>
+          </div>
+        </div>
+
+        {!firebaseConfigured && (
+          <p className="sync-note">Configura le variabili Firebase nel file `.env` per attivare login e sync.</p>
+        )}
+
+        {firebaseConfigured && !authReady && (
+          <p className="sync-note">Controllo sessione Firebase...</p>
+        )}
+
+        {firebaseConfigured && authReady && authUser && (
+          <div className="account-summary">
+            <div>
+              <span><Mail size={16} /> {authUser.email}</span>
+              <small className={`sync-pill ${syncStatus.state}`}>{syncStatus.message}</small>
+            </div>
+            <button className="ghost" type="button" onClick={onSignOut}>
+              <LogOut size={17} />
+              Esci
+            </button>
+          </div>
+        )}
+
+        {firebaseConfigured && authReady && !authUser && (
+          <form className="auth-form" onSubmit={handleAuthSubmit}>
+            <div className="auth-toggle" role="tablist" aria-label="Accesso Firebase">
+              <button
+                type="button"
+                className={authMode === "signin" ? "active" : ""}
+                onClick={() => setAuthMode("signin")}
+              >
+                Accedi
+              </button>
+              <button
+                type="button"
+                className={authMode === "signup" ? "active" : ""}
+                onClick={() => setAuthMode("signup")}
+              >
+                Registrati
+              </button>
+            </div>
+            <label>
+              Email
+              <input
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                required
+              />
+            </label>
+            <label>
+              Password
+              <input
+                type="password"
+                autoComplete={authMode === "signup" ? "new-password" : "current-password"}
+                value={password}
+                minLength={6}
+                onChange={(event) => setPassword(event.target.value)}
+                required
+              />
+            </label>
+            <button className="primary auth-submit" type="submit">
+              <LogIn size={18} />
+              {authMode === "signup" ? "Crea account" : "Accedi"}
+            </button>
+          </form>
+        )}
       </section>
 
       <button className="settings-row" onClick={onEnableNotifications}>
