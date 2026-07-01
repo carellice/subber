@@ -680,16 +680,40 @@ function App() {
     message: isFirebaseConfigured ? "Accedi per sincronizzare i dati." : "Firebase non e' configurato."
   });
   const modalHistoryActive = useRef(false);
+  const renewalHistoryRouteActive = useRef(false);
   const pendingModalClose = useRef(null);
   const backupInputRef = useRef(null);
   const dataRef = useRef(data);
 
   function selectTab(tab) {
+    if (activeTab === "renewals" && tab !== "renewals" && renewalHistoryRouteActive.current) {
+      renewalHistoryRouteActive.current = false;
+      window.history.replaceState({ subberRoute: tab }, "");
+    }
+
     setActiveTab(tab);
     window.requestAnimationFrame(() => {
       window.scrollTo({ top: 0, left: 0, behavior: "instant" });
       document.querySelector(".app-shell")?.scrollTo?.({ top: 0, left: 0, behavior: "instant" });
     });
+  }
+
+  function openRenewalHistory() {
+    if (activeTab !== "renewals") {
+      window.history.pushState({ subberRoute: "renewals" }, "");
+      renewalHistoryRouteActive.current = true;
+    }
+
+    selectTab("renewals");
+  }
+
+  function closeRenewalHistory() {
+    if (renewalHistoryRouteActive.current) {
+      window.history.back();
+      return;
+    }
+
+    selectTab("home");
   }
 
   useEffect(() => {
@@ -1427,6 +1451,11 @@ function App() {
       return;
     }
 
+    if (activeTab === "renewals") {
+      closeRenewalHistory();
+      return;
+    }
+
     if (activeTab !== "home") {
       selectTab("home");
       return;
@@ -1454,7 +1483,13 @@ function App() {
     }
 
     function handlePopState() {
-      if (!modalHistoryActive.current) return;
+      if (!modalHistoryActive.current) {
+        if (renewalHistoryRouteActive.current || activeTab === "renewals") {
+          renewalHistoryRouteActive.current = false;
+          selectTab("home");
+        }
+        return;
+      }
 
       modalHistoryActive.current = false;
       const pending = pendingModalClose.current;
@@ -1470,7 +1505,7 @@ function App() {
 
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
-  }, [editingSub, selectedSub, editingCategory, closingModal]);
+  }, [editingSub, selectedSub, editingCategory, closingModal, activeTab]);
 
   useEffect(() => {
     if (!isNativeApp()) return undefined;
@@ -1576,7 +1611,7 @@ function App() {
             onCreateCategory={() => setEditingCategory(emptyCategory())}
             onOpenSubscriptions={() => selectTab("subscriptions")}
             onOpenCategories={() => selectTab("categories")}
-            onOpenRenewalHistory={() => selectTab("renewals")}
+            onOpenRenewalHistory={openRenewalHistory}
             onOpenCategorySubscriptions={(categoryId) => {
               setActiveCategory(categoryId);
               selectTab("subscriptions");
@@ -1592,7 +1627,7 @@ function App() {
             renewals={data.renewalHistory}
             categories={categories}
             currencyCode={data.currency}
-            onBack={() => selectTab("home")}
+            onBack={closeRenewalHistory}
           />
         )}
 
