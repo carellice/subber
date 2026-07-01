@@ -81,6 +81,8 @@ const SORT_MODE_STORAGE_KEY = "subber-sort-mode-v1";
 const SORT_DIRECTION_STORAGE_KEY = "subber-sort-direction-v1";
 const CLOUD_SETTINGS_ID = "main";
 const REMINDER_DAYS = [1, 3, 7, 14, 30];
+const RENEWAL_HISTORY_WINDOW_DAYS = 40;
+const RENEWAL_HISTORY_HOME_LIMIT = 5;
 const SORT_OPTIONS = [
   { value: "name", label: "Nome" },
   { value: "renewal", label: "Scadenza" },
@@ -151,7 +153,8 @@ function loadData() {
       return {
         ...saved,
         onboardingCompleted: saved.onboardingCompleted ?? true,
-        showMonthlyInList: saved.showMonthlyInList ?? false
+        showMonthlyInList: saved.showMonthlyInList ?? false,
+        renewalHistory: mergeRenewalHistory([], saved.renewalHistory || [])
       };
     }
   } catch {
@@ -169,7 +172,8 @@ function initialData() {
     notificationsEnabled: false,
     dismissedNotifications: {},
     onboardingCompleted: false,
-    showMonthlyInList: false
+    showMonthlyInList: false,
+    renewalHistory: []
   };
 }
 
@@ -204,6 +208,13 @@ function dateKey(date) {
   return `${year}-${month}-${day}`;
 }
 
+function dateDaysAgo(days, reference = new Date()) {
+  const date = new Date(reference);
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() - days);
+  return dateKey(date);
+}
+
 function addMonthsClamped(date, months, preferredDay = date.getDate()) {
   const next = new Date(date);
   next.setDate(1);
@@ -225,6 +236,112 @@ function addCadenceCycle(date, cadence, preferredDay) {
   if (cadence === "yearly") return addMonthsClamped(date, 12, preferredDay);
   if (cadence === "biannual") return addMonthsClamped(date, 24, preferredDay);
   return addMonthsClamped(date, 1, preferredDay);
+}
+
+function renewalHistoryId(subscriptionId, renewedOn) {
+  return `${subscriptionId}-${renewedOn}`;
+}
+
+function serializeRenewalHistoryItem(item) {
+  const subscriptionId = item.subscriptionId || "";
+  const renewedOn = item.renewedOn || "";
+
+  return {
+    id: item.id || renewalHistoryId(subscriptionId, renewedOn),
+    subscriptionId,
+    subscriptionName: item.subscriptionName || "Abbonamento",
+    categoryId: item.categoryId || "",
+    amount: Number(item.amount || 0),
+    cadence: item.cadence || "monthly",
+    renewedOn,
+    nextRenewalDate: item.nextRenewalDate || "",
+    recordedAt: item.recordedAt || new Date().toISOString()
+  };
+}
+
+function mergeRenewalHistory(existing = [], additions = []) {
+  const byId = new Map();
+  const today = dateFromKey(dateKey(new Date()));
+  const cutoff = dateFromKey(dateDaysAgo(RENEWAL_HISTORY_WINDOW_DAYS));
+
+  [...additions, ...existing].forEach((item) => {
+    const serialized = serializeRenewalHistoryItem(item);
+    const renewedOn = dateFromKey(serialized.renewedOn);
+
+    if (
+      serialized.subscriptionId &&
+      renewedOn &&
+      renewedOn >= cutoff &&
+      renewedOn <= today &&
+      !byId.has(serialized.id)
+    ) {
+      byId.set(serialized.id, serialized);
+    }
+  });
+
+  return Array.from(byId.values())
+    .sort((a, b) => {
+      const renewedSort = String(b.renewedOn).localeCompare(String(a.renewedOn));
+      return renewedSort || String(b.recordedAt).localeCompare(String(a.recordedAt));
+    });
+}
+
+function advanceSubscriptionRenewal(subscription, reference = new Date()) {
+  const today = new Date(reference);
+  today.setHours(0, 0, 0, 0);
+
+  let renewal = dateFromKey(subscription.renewalDate);
+  if (!renewal) return { subscription, history: [] };
+
+  const preferredDay = renewal.getDate();
+  const history = [];
+  const recordedAt = new Date().toISOString();
+
+  while (renewal < today) {
+    const renewedOn = dateKey(renewal);
+    const nextRenewal = addCadenceCycle(renewal, subscription.cadence, preferredDay);
+
+    if (subscription.id) {
+      history.push({
+        id: renewalHistoryId(subscription.id, renewedOn),
+        subscriptionId: subscription.id,
+        subscriptionName: subscription.name || "Abbonamento",
+        categoryId: subscription.categoryId || "",
+        amount: Number(subscription.price || 0),
+        cadence: subscription.cadence || "monthly",
+        renewedOn,
+        nextRenewalDate: dateKey(nextRenewal),
+        recordedAt
+      });
+    }
+
+    renewal = nextRenewal;
+  }
+
+  const renewalDate = dateKey(renewal);
+  return {
+    subscription: renewalDate === subscription.renewalDate ? subscription : { ...subscription, renewalDate },
+    history
+  };
+}
+
+function advanceDataRenewals(current) {
+  let changed = false;
+  const historyAdditions = [];
+  const subscriptions = current.subscriptions.map((subscription) => {
+    const advanced = advanceSubscriptionRenewal(subscription);
+    if (advanced.subscription !== subscription) changed = true;
+    historyAdditions.push(...advanced.history);
+    return advanced.subscription;
+  });
+
+  if (!changed && !historyAdditions.length) return current;
+
+  return {
+    ...current,
+    subscriptions,
+    renewalHistory: mergeRenewalHistory(current.renewalHistory || [], historyAdditions)
+  };
 }
 
 function nextRenewalDate(value, cadence, reference = new Date()) {
@@ -371,6 +488,7 @@ function hasLocalUserData(data) {
       data.onboardingCompleted ||
       data.showMonthlyInList ||
       data.notificationsEnabled ||
+      data.renewalHistory?.length ||
       Object.keys(data.dismissedNotifications || {}).length
   );
 }
@@ -433,6 +551,7 @@ function settingsFromState(data, theme, subscriptionSort, subscriptionSortDirect
     dismissedNotifications: data.dismissedNotifications || {},
     onboardingCompleted: Boolean(data.onboardingCompleted),
     showMonthlyInList: Boolean(data.showMonthlyInList),
+    renewalHistory: mergeRenewalHistory([], data.renewalHistory || []),
     theme,
     subscriptionSort,
     subscriptionSortDirection,
@@ -447,7 +566,8 @@ function applyRemoteSettings(settings, current) {
     notificationsEnabled: Boolean(settings.notificationsEnabled),
     dismissedNotifications: settings.dismissedNotifications || {},
     onboardingCompleted: settings.onboardingCompleted ?? current.onboardingCompleted,
-    showMonthlyInList: Boolean(settings.showMonthlyInList)
+    showMonthlyInList: Boolean(settings.showMonthlyInList),
+    renewalHistory: mergeRenewalHistory(current.renewalHistory || [], settings.renewalHistory || [])
   };
 }
 
@@ -742,6 +862,7 @@ function App() {
     data.dismissedNotifications,
     data.onboardingCompleted,
     data.showMonthlyInList,
+    data.renewalHistory,
     theme,
     subscriptionSort,
     subscriptionSortDirection
@@ -793,23 +914,15 @@ function App() {
   }, []);
 
   useEffect(() => {
-    function advancePastRenewals() {
-      setData((current) => {
-        let changed = false;
-        const subscriptions = current.subscriptions.map((subscription) => {
-          const normalized = normalizeSubscriptionRenewal(subscription);
-          if (normalized !== subscription) changed = true;
-          return normalized;
-        });
-
-        return changed ? { ...current, subscriptions } : current;
-      });
-    }
-
+    const advancePastRenewals = () => setData(advanceDataRenewals);
     advancePastRenewals();
     const timer = window.setInterval(advancePastRenewals, 60 * 60 * 1000);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    setData(advanceDataRenewals);
+  }, [data.subscriptions]);
 
   useEffect(() => {
     function preventNumberWheel(event) {
@@ -1153,7 +1266,8 @@ function App() {
           notificationsEnabled: Boolean(imported.notificationsEnabled),
           dismissedNotifications: imported.dismissedNotifications || {},
           onboardingCompleted: true,
-          showMonthlyInList: Boolean(imported.showMonthlyInList)
+          showMonthlyInList: Boolean(imported.showMonthlyInList),
+          renewalHistory: mergeRenewalHistory([], imported.renewalHistory || [])
         });
         if (authUser && cloudReady) {
           void replaceUserCloudData(
@@ -1165,7 +1279,8 @@ function App() {
               notificationsEnabled: Boolean(imported.notificationsEnabled),
               dismissedNotifications: imported.dismissedNotifications || {},
               onboardingCompleted: true,
-              showMonthlyInList: Boolean(imported.showMonthlyInList)
+              showMonthlyInList: Boolean(imported.showMonthlyInList),
+              renewalHistory: mergeRenewalHistory([], imported.renewalHistory || [])
             },
             { theme, subscriptionSort, subscriptionSortDirection }
           ).catch((error) => {
@@ -1386,9 +1501,12 @@ function App() {
     home: "Panoramica",
     subscriptions: "Abbonamenti",
     categories: "Categorie",
+    renewals: "Storico rinnovi",
     settings: "Impostazioni"
   }[activeTab];
-  const activeNavIndex = ["home", "subscriptions", "categories", "settings"].indexOf(activeTab);
+  const navTabs = ["home", "subscriptions", "categories", "settings"];
+  const activeNavTab = activeTab === "renewals" ? "home" : activeTab;
+  const activeNavIndex = Math.max(0, navTabs.indexOf(activeNavTab));
   const navItems = [
     { id: "home", icon: <Home />, label: "Home" },
     { id: "subscriptions", icon: <LayoutDashboard />, label: "Lista" },
@@ -1434,7 +1552,7 @@ function App() {
           {navItems.map((item) => (
             <button
               key={item.id}
-              className={activeTab === item.id ? "active" : ""}
+              className={activeNavTab === item.id ? "active" : ""}
               type="button"
               onClick={() => selectTab(item.id)}
             >
@@ -1452,11 +1570,13 @@ function App() {
             subscriptions={subscriptions}
             categories={categories}
             categoryTotals={categoryTotals}
+            renewalHistory={data.renewalHistory}
             currencyCode={data.currency}
             onCreate={() => setEditingSub(emptySubscription(categories[0]?.id))}
             onCreateCategory={() => setEditingCategory(emptyCategory())}
             onOpenSubscriptions={() => selectTab("subscriptions")}
             onOpenCategories={() => selectTab("categories")}
+            onOpenRenewalHistory={() => selectTab("renewals")}
             onOpenCategorySubscriptions={(categoryId) => {
               setActiveCategory(categoryId);
               selectTab("subscriptions");
@@ -1464,6 +1584,15 @@ function App() {
             onOpenDetail={setSelectedSub}
             onEditSubscription={setEditingSub}
             onDeleteSubscription={removeSubscription}
+          />
+        )}
+
+        {activeTab === "renewals" && (
+          <RenewalHistoryPage
+            renewals={data.renewalHistory}
+            categories={categories}
+            currencyCode={data.currency}
+            onBack={() => selectTab("home")}
           />
         )}
 
@@ -1543,7 +1672,7 @@ function App() {
         />
       )}
 
-      {activeTab !== "settings" && activeTab !== "home" && (
+      {activeTab !== "settings" && activeTab !== "home" && activeTab !== "renewals" && (
         <button
           className="fab"
           title={activeTab === "categories" ? "Nuova categoria" : "Nuovo abbonamento"}
@@ -1562,7 +1691,7 @@ function App() {
       <nav className="bottom-nav" aria-label="Navigazione principale" style={{ "--active-index": activeNavIndex }}>
         <span className="nav-indicator" aria-hidden="true" />
         {navItems.map((item) => (
-          <NavItem key={item.id} id={item.id} active={activeTab} onClick={selectTab} icon={item.icon} label={item.label} />
+          <NavItem key={item.id} id={item.id} active={activeNavTab} onClick={selectTab} icon={item.icon} label={item.label} />
         ))}
       </nav>
 
@@ -1621,11 +1750,13 @@ function HomePage({
   subscriptions,
   categories,
   categoryTotals,
+  renewalHistory,
   currencyCode,
   onCreate,
   onCreateCategory,
   onOpenSubscriptions,
   onOpenCategories,
+  onOpenRenewalHistory,
   onOpenCategorySubscriptions,
   onOpenDetail,
   onEditSubscription,
@@ -1642,6 +1773,8 @@ function HomePage({
     }))
     .filter((category) => category.count > 0)
     .sort((a, b) => b.count - a.count || b.total - a.total)[0];
+  const visibleRenewals = mergeRenewalHistory([], renewalHistory || []);
+  const recentRenewals = visibleRenewals.slice(0, RENEWAL_HISTORY_HOME_LIMIT);
 
   if (!subscriptions.length) {
     return (
@@ -1700,6 +1833,13 @@ function HomePage({
             </button>
           ))}
         </div>
+
+        <RenewalHistorySection
+          renewals={recentRenewals}
+          categories={categories}
+          currencyCode={currencyCode}
+          onOpenAll={onOpenRenewalHistory}
+        />
       </div>
     );
   }
@@ -1783,6 +1923,88 @@ function HomePage({
           </button>
         ))}
       </div>
+
+      <RenewalHistorySection
+        renewals={recentRenewals}
+        categories={categories}
+        currencyCode={currencyCode}
+        onOpenAll={onOpenRenewalHistory}
+      />
+    </div>
+  );
+}
+
+function RenewalHistorySection({ renewals, categories, currencyCode, onOpenAll }) {
+  return (
+    <>
+      <SectionHeader
+        title="Storico rinnovi"
+        action={onOpenAll ? "Vedi tutti" : undefined}
+        onClick={onOpenAll}
+        meta={renewals.length ? `Ultimi ${renewals.length}` : "Nessun rinnovo"}
+      />
+      <RenewalHistoryList renewals={renewals} categories={categories} currencyCode={currencyCode} />
+    </>
+  );
+}
+
+function RenewalHistoryPage({ renewals, categories, currencyCode, onBack }) {
+  const visibleRenewals = mergeRenewalHistory([], renewals || []);
+
+  return (
+    <div className="screen-grid renewal-history-page">
+      <section className="page-hero small-hero">
+        <span><Clock3 size={18} /> Ultimi {RENEWAL_HISTORY_WINDOW_DAYS} giorni</span>
+        <p>
+          Rinnovi automatici gia' registrati dagli abbonamenti scaduti.
+        </p>
+      </section>
+
+      <SectionHeader
+        title="Tutti i rinnovi"
+        action="Home"
+        onClick={onBack}
+        meta={`${visibleRenewals.length} ${visibleRenewals.length === 1 ? "voce" : "voci"}`}
+      />
+      <RenewalHistoryList renewals={visibleRenewals} categories={categories} currencyCode={currencyCode} />
+    </div>
+  );
+}
+
+function RenewalHistoryList({ renewals, categories, currencyCode }) {
+  return (
+    <div className="renewal-history-list">
+      {renewals.length ? (
+        renewals.map((renewal) => {
+          const category = categories.find((cat) => cat.id === renewal.categoryId);
+
+          return (
+            <article
+              className="renewal-history-item"
+              key={renewal.id}
+              style={{ "--accent": category?.color || "#ffd84d" }}
+            >
+              <span className="renewal-history-icon" aria-hidden="true">
+                <Check size={18} />
+              </span>
+              <div>
+                <strong>{renewal.subscriptionName}</strong>
+                <span>Rinnovato il {formatDate(renewal.renewedOn)}</span>
+              </div>
+              <div className="renewal-history-meta">
+                <strong>{currency(renewal.amount, currencyCode)}</strong>
+                <span>{cadenceLabel(renewal.cadence)}</span>
+              </div>
+              <small>Prossimo {renewal.nextRenewalDate ? formatDate(renewal.nextRenewalDate) : "-"}</small>
+            </article>
+          );
+        })
+      ) : (
+        <div className="renewal-history-empty">
+          <Clock3 size={18} />
+          <span>Qui compariranno i rinnovi degli ultimi {RENEWAL_HISTORY_WINDOW_DAYS} giorni.</span>
+        </div>
+      )}
     </div>
   );
 }

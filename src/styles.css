@@ -447,7 +447,8 @@ textarea {
 .home-grid > .notification,
 .home-grid > .section-header,
 .home-grid > .compact-list,
-.home-grid > .category-chips {
+.home-grid > .category-chips,
+.home-grid > .renewal-history-list {
   grid-column: 1 / -1;
 }
 
@@ -866,6 +867,88 @@ label,
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 12px;
+}
+
+.renewal-history-list {
+  display: grid;
+  gap: 10px;
+}
+
+.renewal-history-item,
+.renewal-history-empty {
+  width: 100%;
+  min-height: 76px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 13px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--surface) 88%, var(--surface-high) 12%);
+}
+
+.renewal-history-icon {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 42%, var(--surface-high));
+}
+
+.renewal-history-item > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.renewal-history-item strong,
+.renewal-history-item span,
+.renewal-history-item small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.renewal-history-item > div:first-of-type strong {
+  font-size: 1rem;
+}
+
+.renewal-history-item > div:first-of-type span,
+.renewal-history-item small,
+.renewal-history-meta span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 850;
+}
+
+.renewal-history-meta {
+  justify-items: end;
+  text-align: right;
+}
+
+.renewal-history-meta strong {
+  font-size: 1.02rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.renewal-history-item > small {
+  padding: 8px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  color: var(--primary-readable);
+}
+
+.renewal-history-empty {
+  grid-template-columns: auto minmax(0, 1fr);
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.renewal-history-empty svg {
+  color: var(--primary-readable);
 }
 
 .metric {
@@ -3059,6 +3142,16 @@ textarea {
 
   .renewal-pill {
     margin-left: 71px;
+  }
+
+  .renewal-history-item {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: start;
+  }
+
+  .renewal-history-item > small {
+    grid-column: 2 / -1;
+    justify-self: start;
   }
 
   .sub-actions {
